@@ -1,0 +1,55 @@
+== Arquitectura de la Lightning Network.
+
+En la primera parte de este libro hemos introducido los principales conceptos de la Lightning Network y hemos trabajado con un ejemplo completo de enrutamiento de un pago y la configuración de las herramientas que podemos utilizar para explorar más a fondo. En la segunda parte del libro exploraremos la Lightning Network con mucho más detalle técnico, diseccionando cada uno de los bloques de construcción.
+
+En esta sección describiremos los componentes de la Lightning Network con más detalle y proporcionaremos una perspectiva "general" para guiarle a través de los siguientes capítulos.
+
+=== El conjunto de protocolos de la Lightning Network.
+
+La Lightning Network está compuesta por una compleja colección de protocolos que se ejecutan sobre Internet. Podemos clasificar a grandes rasgos estos protocolos en cinco capas distintas que conforman una _pila de protocolos_, donde cada capa se basa en los protocolos de la capa inferior y los utiliza. Además, cada capa de protocolo abstrae las capas subyacentes y "oculta" parte de la complejidad.
+
+El diagrama de arquitectura mostrado en <<lightning_network_protocol_suite>> proporciona una visión general de estas capas y de los protocolos que las componen. 
+
+[[lightning_network_protocol_suite]]
+.The Lightning Network protocol suite
+image::images/mtln_0601.png[]
+
+Las cinco capas de la Lightning Network, de abajo hacia arriba, son:
+
+Capa de conexión a la red: Contiene los protocolos que interactúan directamente con los protocolos centrales de Internet (TCP/IP), los protocolos superpuestos (Tor v2/v3) y los servicios de Internet (DNS). Esta capa también contiene los protocolos criptográficos de transporte que protegen los mensajes de Lightning.
+
+Capa de mensajería:: Esta capa contiene los protocolos que los nodos utilizan para negociar las características, formatear los mensajes y codificar los campos de los mensajes.
+
+Capa Peer-to-peer (P2P): Esta capa es la principal capa de protocolo para la comunicación entre los nodos Lightning y contiene todos los diferentes mensajes que se intercambian entre los nodos.
+
+Capa de enrutamiento:: Esta capa contiene los protocolos utilizados para enrutar los pagos entre los nodos, de extremo a extremo y atómicamente. Esta capa contiene la funcionalidad principal de la Lightning Network: los pagos enrutados.
+
+Capa de pago:: La capa más alta de la red, que presenta una interfaz de pago fiable para las aplicaciones.
+
+=== Lightning en detalle.
+
+A lo largo de los próximos 10 capítulos, diseccionaremos el conjunto de protocolos y examinaremos cada componente de la Lightning Network en detalle.
+
+Hemos pasado bastante tiempo intentando decidir el mejor orden para presentar estos detalles. No es una elección fácil porque hay mucha interdependencia entre los distintos componentes: cuando empiezas a explicar uno, te das cuenta de que arrastra a bastantes de los otros componentes. En lugar de un enfoque de arriba a abajo o de abajo a arriba, acabamos eligiendo un camino más serpenteante que comienza con los bloques de construcción más fundamentales que son exclusivos de la Lightning Network: los canales de pago, y se mueve hacia fuera desde allí. Pero como ese camino no es obvio, utilizaremos el conjunto de protocolos Lightning que se muestra en <<lightning_network_protocol_suite>> como mapa. En cada capítulo se centrará en uno o más componentes relacionados, y los verá resaltados en el conjunto de protocolos. Algo así como un marcador de mapa que dice "¡Estás aquí!".
+
+Esto es lo que vamos a cubrir: 
+
+#canales_de_pago:: En este capítulo veremos cómo funcionan los canales de pago, con bastante más profundidad de la que vimos en las primeras partes del libro. Veremos la estructura y el Guión Bitcoin de las transacciones de financiación y compromiso, y el proceso utilizado por los nodos para negociar cada paso del protocolo.
+
+#enrutamiento:: A continuación, reuniremos varios canales de pago en una red y enrutaremos un pago de un extremo a otro. En ese proceso nos adentraremos en el contrato inteligente hash time-locked contract (HTLC) y en el Bitcoin Script que utilizamos para construirlo.
+
+#operación_de_canal:: Uniendo los conceptos de un payment channel simple y un pago enrutado usando HTLCs, ahora veremos cómo los HTLCs son parte de la commitment transaction de cada canal. También veremos el protocolo para añadir, liquidar, fallar y eliminar HTLCs de los compromisos.
+
+#onion_routing:: A continuación, veremos cómo se propaga la información de los HTLC a través de la red dentro del protocolo de onion routing. Veremos el mecanismo de cifrado y descifrado por capas que da a la Lightning Network algunas de sus características de privacidad.
+
+#gossip:: En este capítulo veremos cómo los nodos Lightning se encuentran entre sí y aprenderemos sobre los canales publicados para construir un gráfico de canales que pueden utilizar para encontrar caminos a través de la red.
+
+>#path_finding:: A continuación, veremos cómo la información del gossip protocol es utilizada por cada nodo para construir un "mapa" de toda la red, que puede utilizar para encontrar caminos de un punto a otro para enrutar los pagos. También veremos las innovaciones existentes en la búsqueda de rutas, como los pagos multiparte.
+
+#protocolo_de_alambre:: La base de la Lightning Network es el protocolo peer-to-peer que los nodos utilizan para intercambiar mensajes sobre la red y sobre sus canales. En este capítulo veremos cómo se construyen esos mensajes y las capacidades de extensión que se incorporan a los mensajes con bits de características y codificación Type-Length-Value (TLV).
+
+#transporte_de_mensajes_encriptados:: Al descender a la parte inferior de la red, veremos el sistema de transporte cifrado subyacente que garantiza el secreto y la integridad de todas las comunicaciones entre nodos.
+
+#facturas:: Una parte clave de la Lightning Network son las solicitudes de pago, también conocidas como facturas Lightning. En este capítulo diseccionamos la estructura y codificación de una invoice.
+
+¡Vamos a sumergirnos en ella!

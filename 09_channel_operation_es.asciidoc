@@ -1,0 +1,358 @@
+[[channel_operation]]
+== Operación del canal y reenvío de pagos.
+
+En este capítulo reuniremos los canales de pago y los contratos de tiempo bloqueado (HTLC). En <<payment_channels>>, explicamos la forma en que Alice y Bob construyen un payment channel entre sus dos nodos. También hemos visto los mecanismos de compromiso y penalización que aseguran el payment channel. En "Enrutamiento", vimos los HTLCs y cómo éstos pueden ser utilizados para enrutar un pago a través de una ruta hecha de múltiples canales de pago. En este capítulo unimos los dos conceptos viendo cómo se gestionan los HTLC en cada payment channel, cómo se comprometen los HTLC con el estado del canal y cómo se liquidan para actualizar los saldos del canal.
+
+Específicamente, discutiremos "Añadir, liquidar, fallar HTLCs" y la "Máquina de estado del canal" que forman la superposición entre la capa peer-to-peer y la capa de enrutamiento, como se destaca por un esquema en <<LN_protocol_channelops_highlight>>. 
+
+[[LN_protocol_channelops_highlight]]
+.Channel operation and payment forwarding in the Lightning protocol suite
+image::images/mtln_0901.png["Channel operation and payment forwarding in the Lightning protocol suite"]
+
+=== Local (un solo canal) frente a enrutado (múltiples canales).
+
+Aunque es posible enviar pagos a través de un payment channel simplemente actualizando los saldos del canal y creando nuevas transacciones de compromiso, el protocolo Lightning utiliza HTLC incluso para los pagos "locales" a través de un payment channel. La razón de esto es mantener el mismo diseño de protocolo independientemente de si un pago es de un solo salto (a través de un único payment channel) o de varios saltos (enrutado a través de múltiples canales de pago).
+
+Al mantener la misma abstracción tanto para el local como para el remoto, no sólo simplificamos el diseño del protocolo sino que también mejoramos la privacidad. Para el receptor de un pago no hay ninguna diferencia discernible entre un pago realizado directamente por su socio de canal y un pago reenviado por su socio de canal en nombre de otra persona.
+
+=== Reenvío de pagos y actualización de compromisos con HTLCs.
+
+Volveremos a nuestro ejemplo de <<routing>> para demostrar cómo los HTLC de Alice a Dina se comprometen con cada payment channel. Como recuerdas en nuestro ejemplo, Alice está pagando a Dina 50.000 satoshis enrutando un HTLC a través de Bob y Chan. La red se muestra en <<alice_dina_htlc_2>>. 
+
+[[alice_dina_htlc_2]]
+.Alice pays Dina with an HTLC routed via Bob and Chan
+image::images/mtln_0809.png["Alice pays Dina with an HTLC routed via Bob and Chan"]
+
+Nos centraremos en el payment channel entre Alice y Bob y revisaremos los mensajes y transacciones que utilizan para procesar este HTLC.
+
+==== HTLC y flujo de mensajes de compromiso.
+
+El flujo de mensajes entre Alice y Bob (y también entre cualquier par de socios del canal) se muestra en <<HTLC_commitment_message_flow>>. 
+
+[[HTLC_commitment_message_flow]]
+.The message flow for HTLC commitment between channel partners
+image::images/mtln_0903.png["The message flow for HTLC commitment between channel partners"]
+
+[role="pagebreak-before"]
+Ya hemos visto el +compromiso_firmado+ y el +revoke_and_ack+ en <<payment_channels>>. Ahora veremos cómo encajan los HTLC en el esquema de compromiso. Los dos nuevos mensajes son +update_add_htlc+, que Alice utiliza para pedir a Bob que añada un HTLC, y +update_fulfill_htlc+, que Bob utiliza para canjear el HTLC una vez que ha recibido el secreto del pago (el secreto de Dina).
+
+=== Reenvío de pagos con HTLCs.
+
+Alice y Bob comienzan con un payment channel que tiene un balance de 70.000 satoshi en cada lado.
+
+Como vimos en <<payment_channels>>, esto significa que Alice y Bob han negociado y cada uno mantiene transacciones de compromiso. Estas transacciones de compromiso son asimétricas, retrasadas y revocables, y se parecen al ejemplo de <<alice_bob_commitment_txs_1>>. 
+
+[[alice_bob_commitment_txs_1]]
+.Alice and Bob's initial commitment transactions
+image::images/mtln_0904.png["Alice and Bob's initial commitment transactions"]
+
+==== Añadir un HTLC.
+
+Alice quiere que Bob acepte un HTLC por valor de 50.200 satoshis para enviarlo a Dina. Para ello, Alice debe enviar los detalles de este HTLC, incluyendo el hash de pago y la cantidad, a Bob. Bob también necesitará saber dónde reenviarlo, algo que discutimos en detalle en <<onion_routing>>.
+
+Para añadir el HTLC, Alice inicia el flujo que vimos en <<HTLC_commitment_message_flow>> enviando el mensaje +update_add_htlc+ a Bob.
+
+[[update_add_htlc]]
+==== El mensaje update_add_HTLC.
+
+Alice envía el mensaje `update_add_HTLC` Lightning a Bob. Este mensaje está definido en https://github.com/lightningnetwork/lightning-rfc/blob/master/02-peer-protocol.md#adding-an-htlc-update_add_htlc[BOLT #2: Peer Protocol, `update_add_HTLC`], y se muestra en el Ejemplo 9-1. 
+
+[[update_add_HTLC_message_fields]]
+.The `update_add_HTLC` message
+====
+----
+[channel_id:channel_id]
+[u64:id]
+[u64:amount_msat]
+[sha256:payment_hash]
+[u32:cltv_expiry]
+[1366*byte:onion_routing_packet]
+----
+====
+
++channel_id+:: Es el canal que Alice tiene con Bob donde quiere añadir el HTLC. Recuerda que Alice y Bob pueden tener varios canales entre sí.
+
++id+:: Este es un contador de HTLC y comienza en +0+ para el primer HTLC ofrecido a Bob por Alice y se incrementa para cada HTLC posterior ofrecido. 
+
++cantidad_msat+:: Es la cantidad (valor) del HTLC en milisatoshis. En nuestro ejemplo es 50.200.000 milisatoshis (es decir, 50.200 satoshis).
+
++hash_de_pago+:: Es el hash del pago calculado a partir de la invoice de Dina. Es _H_ = RIPEMD160(SHA-256(_R_)), donde _R_ es el secreto de Dina que sólo conoce Dina y que se revelará si se le paga.
+
++cltv_expiry+:: Es el tiempo de caducidad de este HTLC, que se codificará como un reembolso con tiempo en caso de que el HTLC no llegue a Dina en este tiempo.
+
++paquete_de_enrutamiento+:: Se trata de una ruta encriptada en onion que indica a Bob dónde debe reenviar este HTLC a continuación (a Chan). El onion routing está cubierto en detalle en <<onion_routing>>. 
+
+[TIP]
+====
+Como recordatorio, la contabilidad dentro de la Lightning Network está en unidades de milisatoshis (milésimas de satoshi), mientras que la contabilidad de Bitcoin está en satoshis. Las cantidades en HTLC son milisatoshis, que se redondean al satoshi más cercano en las transacciones de compromiso de Bitcoin.
+====
+
+==== HTLC en las transacciones de compromiso.
+
+La información recibida es suficiente para que Bob cree una nueva commitment transaction. La nueva commitment transaction tiene las mismas dos salidas +to_self+ y +to_remote+ para el balance de Alice y Bob, y una _nueva_ salida que representa el HTLC ofrecido por Alice.
+
+Ya hemos visto la estructura básica de un HTLC en <<routing>>. El script completo de un HTLC ofrecido está definido en https://github.com/lightningnetwork/lightning-rfc/blob/master/03-transactions.md#offered-htlc-outputs[BOLT #3: Transacciones, Salida HTLC ofrecida] y se muestra en <<offered_htlc_output_script>>. 
+
+
+[[offered_htlc_output_script]]
+.Offered HTLC output script
+====
+[source,text,linenums]
+----
+# Revocation <1>
+OP_DUP OP_HASH160 <RIPEMD160(SHA256(revocationpubkey))> OP_EQUAL
+OP_IF
+    OP_CHECKSIG
+OP_ELSE
+    <remote_HTLCpubkey> OP_SWAP OP_SIZE 32 OP_EQUAL
+    OP_IF
+        # Redemption <2>
+        OP_HASH160 <RIPEMD160(payment_hash)> OP_EQUALVERIFY
+        2 OP_SWAP <local_HTLCpubkey> 2 OP_CHECKMULTISIG
+    OP_ELSE
+        # Refund <3>
+        OP_DROP <cltv_expiry> OP_CHECKLOCKTIMEVERIFY OP_DROP
+        OP_CHECKSIG
+    OP_ENDIF
+OP_ENDIF
+----
+<1> La primera cláusula de la condicional `OP_IF` es canjeable por Alice con una clave de revocación. Si este compromiso es revocado posteriormente, Alice tendrá una clave de revocación para reclamar esta salida en una transacción de penalización, llevándose todo el balance del canal.
+<2> La segunda cláusula es canjeable por la preimagen (secreto de pago, o en nuestro ejemplo, el secreto de Dina) si se revela. Esto permite a Bob reclamar esta salida si tiene el secreto de Dina, lo que significa que ha entregado con éxito el pago a Dina.
+<3> La tercera y última cláusula es un reembolso del HTLC a Alice si el HTLC expira sin llegar a Dina. Se bloquea el tiempo con la expiración +cltv_expiry+. Esto asegura que el balance de Alice no está "atascado" en un HTLC que no puede ser dirigido a Dina.
+====
+
+Hay tres maneras de reclamar esta salida. Intenta leer el script y ver si puedes averiguarlo (recuerda que es un lenguaje basado en la pila, por lo que las cosas aparecen "al revés").
+
+==== Nuevo compromiso con la salida HTLC.
+
+Bob tiene ahora la información necesaria para añadir este script HTLC como una salida adicional y crear una nueva commitment transaction. El nuevo compromiso de Bob tendrá 50.200 satoshis en la salida HTLC. Esa cantidad provendrá del balance del canal de Alice, por lo que el nuevo balance de Alice será de 19.800 satoshis (70.000 - 50.200 = 19.800). Bob construye este compromiso como un "Compromiso #3" tentativo, mostrado en <<add_commitment_3b>>. 
+
+[[add_commitment_3b]]
+.Bob's new commitment with an HTLC output
+image::images/mtln_0905.png["Bob's new commitment with an HTLC output"]
+
+[role="pagebreak-before less_space"]
+==== Alice se compromete.
+
+Poco después de enviar el mensaje +update_add_htlc+, ella se compromete con el nuevo estado del canal, para que el HTLC pueda ser añadido con seguridad por Bob. Bob tiene la información del HTLC y ha construido un nuevo compromiso pero todavía no tiene este nuevo compromiso firmado por Alice.
+
+Alice envía +compromiso_firmado+ a Bob, con la firma para el nuevo compromiso y para el HTLC que contiene. Hemos visto el mensaje +compromiso_firmado+ en <<payment_channels>>, pero ahora podemos entender el resto de los campos. Como recordatorio, se muestra en <<ops_commitment_signed_message>>. 
+
+[[ops_commitment_signed_message]]
+.The `commitment_signed` message
+====
+----
+[channel_id:channel_id]
+[signature:signature]
+[u16:num_htlcs]
+[num_htlcs*signature:htlc_signature]
+----
+====
+
+
+Los campos +num_htlcs+ y +htlc_signature+ tienen ahora más sentido:
+
++num_htlcs+:: Es el número de HTLCs que están pendientes en la commitment transaction. En nuestro ejemplo, sólo un HTLC, el que ofreció Alice.
+
++htlc_signature+:: Es un array de firmas (+num_htlcs+ de longitud), que contiene las firmas de las salidas HTLC.
+
+Alice puede enviar estas firmas sin dudar: siempre puede obtener un reembolso si el HTLC expira sin ser dirigido a Dina.
+
+Ahora, Bob tiene una nueva commitment transaction firmado, como se muestra en <<signed_commitment_3b>>. 
+
+[[signed_commitment_3b]]
+.Bob has a new signed commitment
+image::images/mtln_0906.png[Bob has a new signed commitment]
+
+==== Bob reconoce el nuevo compromiso y revoca el antiguo.
+
+Lo hace enviando el mensaje +revoke_and_ack+, tal y como vimos en <<payment_channels>> anteriormente. Como recordatorio, ese mensaje se muestra en <<revoke_and_ack_message_2>>. 
+
+[[revoke_and_ack_message_2]]
+.The +revoke_and_ack+ message
+====
+----
+[channel_id:channel_id]
+[32*byte:per_commitment_secret]
+[point:next_per_commitment_point]
+----
+====
+
+Bob envía el +per_commitment_secret+ que permite a Alice construir una clave de revocación para construir una transacción de penalización gastando el compromiso antiguo de Bob. Una vez que Bob ha enviado esto, nunca puede publicar el "Compromiso #2" sin arriesgarse a una transacción de penalización y perder todo su dinero. Por lo tanto, el antiguo compromiso es efectivamente revocado.
+
+Bob ha movido efectivamente el estado del canal hacia adelante, como se muestra en <<revoked_commitment_2b>>. 
+
+[[revoked_commitment_2b]]
+.Bob has revoked the old commitment
+image::images/mtln_0907.png[Bob has revoked the old commitment]
+
+A pesar de que Bob tiene una nueva commitment transaction (firmada) y una salida de HTLC en su interior, no puede considerar que su HTLC se haya establecido con éxito.
+
+Primero necesita que Alice revoque su compromiso anterior, porque de lo contrario, Alice puede retroceder su balance a 70.000 satoshis. Bob necesita asegurarse de que Alice también tiene una commitment transaction que contiene el HTLC y ha revocado el compromiso anterior.
+
+Por eso, si Bob no es el destinatario final de los fondos del HTLC, no debe reenviar todavía el HTLC ofreciendo un HTLC en el siguiente canal con Chan.
+
+Alice ha construido una transacción de nuevo compromiso en espejo que contiene el nuevo HTLC, pero aún debe ser firmado por Bob. Podemos verlo en <<add_commitment_3a>>. 
+
+[[add_commitment_3a]]
+.Alice's new commitment with an HTLC output
+image::images/mtln_0908.png["Alice's new commitment with an HTLC output"]
+
+Como describimos en <<payment_channels>>, el compromiso de Alice es la imagen en espejo del de Bob, ya que contiene el constructo asimétrico, retrasado y revocable para la revocación y la aplicación de sanciones de los compromisos antiguos. El balance de 19.800 satoshi de Alice (después de deducir el valor HTLC), es retrasado y revocable. El balance de 70.000 satoshi de Bob es inmediatamente revocable.
+
+A continuación, el flujo de mensajes para +commitment_signed+ y +revoke_and_ack+ se repite ahora, pero en sentido contrario. Bob envía +commitment_signed+ para firmar el nuevo compromiso de Alice, y Alice responde revocando su antiguo compromiso.
+
+Para completar, vamos a revisar rápidamente las transacciones de compromiso como esta ronda de compromiso/revocación ocurre.
+
+[role="pagebreak-before less_space"]
+==== Bob se compromete.
+
+Bob ahora envía un +commitment_signed+ de vuelta a Alice, con sus firmas para la nueva commitment transaction de Alice, incluyendo la salida HTLC que ha añadido.
+
+Ahora Alice tiene la firma para la nueva commitment transaction. El estado del canal se muestra en <<signed_commitment_3a>>. 
+
+[[signed_commitment_3a]]
+.Alice has a new signed commitment
+image::images/mtln_0909.png[Alice has a new signed commitment]
+
+Alice puede ahora reconocer el nuevo compromiso revocando el anterior. Alice envía el mensaje +revoke_and_ack+ que contiene el necesario +per_commitment_point+ que permitirá a Bob construir una clave de revocación y una transacción de penalización. Así, Alice revoca su antiguo compromiso.
+
+El estado del canal se muestra en <<revoked_commitment_2a>>.
+
+[[revoked_commitment_2a]]
+.Alice has revoked the old commitment
+image::images/mtln_0910.png[Alice has revoked the old commitment]
+
+=== Múltiples HTLCs.
+
+En cualquier momento, Alice y Bob pueden tener docenas o incluso cientos de HTLCs a través de un solo canal. Cada HTLC se ofrece y se añade a la commitment transaction como una salida adicional. Por lo tanto, una commitment transaction siempre tiene dos salidas para los balances de los socios del canal y cualquier número de salidas HTLC, una por HTLC.
+
+Como vimos en el mensaje +commitment_signed+, hay una matriz para las firmas de HTLC para que se puedan transmitir múltiples compromisos de HTLC al mismo tiempo.
+
+El número máximo actual de HTLCs permitido en un canal es de 483 HTLCs para tener en cuenta el tamaño máximo de las transacciones de Bitcoin y asegurar que las transacciones de compromiso siguen siendo transacciones válidas de Bitcoin.
+
+Como veremos en la siguiente sección, el máximo es sólo para los HTLCs _pendientes_ porque, una vez que un HTLC se cumple (o falla por tiempo de espera/error), se elimina de la commitment transaction.
+
+=== Cumplimiento del HTLC.
+
+Ahora Bob y Alice tienen una nueva commitment transaction con una salida adicional de HTLC, y hemos logrado un paso importante hacia la actualización de un payment channel.
+
+El nuevo balance de Alice y Bob no refleja todavía que Alice haya enviado con éxito 50.200 satoshis a Bob.
+
+Sin embargo, los HTLCs están ahora configurados de manera que será posible una liquidación segura a cambio de la prueba de pago.
+
+==== Propagación de HTLC.
+
+Supongamos que Bob continúa la cadena y establece un HTLC con Chan por 50.100 satoshis. El proceso será exactamente el mismo que acabamos de ver entre Alice y Bob. Bob enviará +update_add_htlc+ a Chan, luego intercambiarán mensajes +commitment_signed+ y +revoke_and_ack+ en dos rondas, progresando su canal al siguiente estado.
+
+A continuación, Chan hará lo mismo con Dina: ofrecer un HTLC de 50.000 satoshi, comprometerse y revocar, etc. Sin embargo, Dina es la destinataria final del HTLC. Dina es la única que conoce el secreto del pago (la preimagen del hash del pago). Por lo tanto, Dina puede cumplir el HTLC con Chan inmediatamente.
+
+==== Dina cumple el HTLC con Chan.
+
+Dina puede liquidar la HTLC enviando un mensaje +update_fulfill_htlc+ a Chan. El mensaje +update_fulfill_htlc+ está definido en https://github.com/lightningnetwork/lightning-rfc/blob/master/02-peer-protocol.md#removing-an-htlc-update_fulfill_htlc-update_fail_htlc-and-update_fail_malformed_htlc[BOLT #2: Peer Protocol, `update_fulfill_htlc`] y se muestra aquí: 
+
+[[update_fulfill_htlc_message]]
+.The +update_fulfill_htlc+ message
+----
+[channel_id:channel_id]
+[u64:id]
+[32*byte:payment_preimage]
+----
+
+It's a really simple message:
+
++channel_id+:: The channel ID on which the HTLC is committed.
+
++id+:: The ID of the HTLC (we started with 0 and incremented for each HTLC on the channel).
+
++payment_preimage+:: The secret that proves payment was made and redeems the HTLC. This is the +R+ value that was hashed by Dina to produce the payment hash in the invoice to Alice.
+
+When Chan receives this message, he will immediately check if the `payment_preimage` (let's call it _R_) produces the payment hash (let's call it _H_) in the HTLC that he offered to Dina. He hashes it like this:
+
+++++
+<ul class="simplelist">
+<li><em>H</em> = RIPEMD160(SHA-256 (<em>R</em>))</li>
+</ul>
+++++
+
+If the result _H_ matches the payment hash in the HTLC, Chan can do a little dance of celebration. This long-awaited secret can be used to redeem the HTLC, and will be passed back along the chain of payment channels all the way to Alice, resolving every HTLC that was part of this payment to Dina.
+
+Volvamos al canal de Alice y Bob y veamos cómo deshacen el HTLC. Para llegar allí, supongamos que Dina envió el +update_fulfill_htlc+ a Chan, Chan envió +update_fulfill_htlc+ a Bob, y Bob envió +update_fulfill_htlc+ a Alice. La preimagen de pago se ha propagado hasta Alice.
+
+==== Bob liquida el HTLC con Alice.
+
+Cuando Bob envía el +update_fulfill_htlc+ a Alice, éste contendrá la misma +payment_preimage+ que Dina seleccionó para su invoice. Esa +imagen_de_pago+ ha viajado hacia atrás a lo largo de la ruta de pago. En cada paso, el +canal_id+ será diferente y el +id+ (HTLC ID) puede ser diferente. Pero la preimagen es la misma.
+
+Alice también validará la +imagen_de_pago+ recibida de Bob. Comparará su hash con el hash del pago en el HTLC que ofreció a Bob. También encontrará que esta preimagen coincide con el hash de la invoice de Dina. Esto es una prueba de que Dina fue pagada.
+
+El flujo de mensajes entre Alice y Bob se muestra en <<htlc_fulfillment_message_flow>>. 
+
+[[htlc_fulfillment_message_flow]]
+.The HTLC fulfillment message flow
+image::images/mtln_0911.png[The HTLC fulfillment message flow]
+
+Tanto Alice como Bob pueden ahora eliminar el HTLC de las transacciones de compromiso y actualizar sus balances de canal.
+
+Crean nuevos compromisos (Compromiso #4), como se muestra en <<htlc_fulfillment_commitments_added>>. 
+
+[[htlc_fulfillment_commitments_added]]
+.The HTLC is removed and balances are updated in new commitments
+image::images/mtln_0912.png[The HTLC is removed and balances are updated in new commitments]
+
+[role="pagebreak-before"]
+Next, they complete two rounds of commitment and revocation. First, Alice sends +commitment_signed+ to sign Bob's new commitment transaction. Bob responds with +revoke_and_ack+ to revoke his old commitment. Una vez que Bob ha movido el estado del canal hacia adelante, los compromisos se ven como vemos en <<htlc_fulfillment_commitments_bob_commit>>. 
+
+[[htlc_fulfillment_commitments_bob_commit]]
+.Alice signs Bob's new commitment and Bob revoked the old one
+image::images/mtln_0913.png[Alice signs Bob's new commitment and Bob revoked the old one]
+
+[role="pagebreak-before"]
+Finalmente, Bob firma el compromiso de Alice enviándole un mensaje +commitment_signed+. Entonces Alice reconoce y revoca su antiguo compromiso enviando +revoke_and_ack+ a Bob. El resultado final es que tanto Alice como Bob han movido su estado de canal al Compromiso #4, han eliminado el HTLC, y han actualizado sus balances. Su estado actual del canal está representado por las transacciones de compromiso que se muestran en <<alice_bob_htlc_fulfilled>>.
+
+[[alice_bob_htlc_fulfilled]]
+.Alice and Bob settle the HTLC and update balances
+image::images/mtln_0914.png[Alice and Bob settle the HTLC and update balances]
+
+[role="pagebreak-before less_space"]
+=== Eliminación de un HTLC por error o caducidad.
+
+Si un HTLC no se puede cumplir, se puede eliminar del compromiso del canal utilizando el mismo proceso de compromiso y revocación.
+
+En lugar de +update_fulfill_htlc+, Bob enviaría un +update_fail_htlc+ o +update_fail_malformed_htlc+. Estos dos mensajes están definidos en https://github.com/lightningnetwork/lightning-rfc/blob/master/02-peer-protocol.md#removing-an-htlc-update_fulfill_htlc-update_fail_htlc-and-update_fail_malformed_htlc[BOLT #2: Peer Protocol, Removing an HTLC].
+
+El mensaje +update_fail_htlc+ se muestra en lo siguiente:
+
+[[update_fail_htlc_message]]
+.The +update_fail_htlc+ message
+----
+[channel_id:channel_id]
+[u64:id]
+[u16:len]
+[len*byte:reason]
+----
+
+Es bastante autoexplicativo. El campo multibyte +reason+ está definido en https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#failure-messages[BOLT #4: Onion Routing], que describiremos en <<onion_routing>>. 
+
+Si Alice recibiera un +update_fail_htlc+ de Bob, el proceso se desarrollaría de forma muy similar: los dos socios del canal eliminarían el HTLC, crearían transacciones de compromiso actualizadas y pasarían por dos rondas de compromiso/revocación para avanzar el estado del canal hasta el siguiente compromiso. La única diferencia: los saldos finales volverían a ser los que eran sin el HTLC, esencialmente devolviendo a Alice el valor del HTLC.
+
+=== Hacer un pago local.
+
+Llegados a este punto, comprenderás fácilmente por qué los HTLC se utilizan tanto para los pagos remotos como para los locales. Cuando Alice paga a Bob por un café, no sólo actualiza el balance del canal y se compromete con un nuevo estado. En su lugar, el pago se realiza con un HTLC, de la misma manera que Alice pagó a Dina. El hecho de que sólo haya un salto de canal no supone ninguna diferencia. Funcionaría así:
+[start=1]
+. Alice pide un café en la página de la tienda de Bob.
+. La tienda de Bob envía una invoice con un hash de pago.
+. Alice construye un HTLC a partir de ese hash de pago.
+. Alice ofrece el HTLC a Bob con +update_add_htlc+.
+. Alice y Bob intercambian compromisos y revocaciones añadiendo el HTLC a sus transacciones de compromiso.
+. Bob envía +update_fulfill_htlc+ a Alice con la preimagen de pago.
+. Alice y Bob intercambian compromisos y revocaciones eliminando el HTLC y actualizando los saldos del canal.
+
+Tanto si un HTLC se reenvía a través de muchos canales como si se cumple en un solo "salto" de canal, el proceso es exactamente el mismo
+
+=== Conclusión.
+
+En este capítulo hemos visto cómo las transacciones de compromiso (de <<payment_channels>>) y los HTLCs (de <<routing>>) trabajan juntos. Hemos visto cómo se añade un HTLC a una commitment transaction, y cómo se cumple. Vimos cómo el sistema asimétrico, retrasado y revocable para hacer cumplir el estado del canal se extiende a los HTLCs.
+
+También vimos cómo un pago local y un pago enrutado multisalto se manejan de manera idéntica: usando HTLCs.
+
+En el próximo capítulo veremos el sistema de enrutamiento de mensajes encriptados llamado _onion routing_.

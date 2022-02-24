@@ -1,0 +1,47 @@
+[appendix]
+[[sources_licenses]]
+== Fuentes y avisos de licencia.
+
+Este apéndice contiene avisos de atribución y licencia para el material incluido con permiso concedido a través de licencias abiertas.
+
+=== Fuentes.
+
+El material se ha obtenido de varias fuentes públicas y con licencia abierta:
+
+* https://wiki.ion.radar.tech[ION Lightning Network Wiki]
+* https://medium.com/suredbits/lightning-101-what-is-a-lightning-invoice-d527db1a77e6["Lightning 101: ¿Qué es una invoice Lightning?" por Suredbits]
+* https://github.com/lightningnetwork/lightning-rfc[Lightning Network In-Progress Specifications GitHub]; Creative Commons Attribution (CC-BY 4.0)
+* https://w.wiki/4QCL[Página de Wikipedia, "Elliptic-curve Diffie-Hellman"]
+* https://w.wiki/4QCX[Página de Wikipedia, "Firma digital"]
+* https://w.wiki/4QCb[Página de Wikipedia, "Función hash criptográfica"]
+* https://w.wiki/4QCc[Página de Wikipedia, "Enrutamiento de onion"]
+* https://w.wiki/4QCd[Wikimedia Commons, "Lightning Network Protocol Suite"]
+* https://w.wiki/4QCf[Wikimedia Commons, "Introducción al protocolo de la Lightning Network y los fundamentos de la tecnología Lightning"]
+
+[role="pagebreak-before less_space"]
+=== Servidor BTCPay.
+
+BTCPay Server https://github.com/btcpayserver/btcpayserver-media[logo, capturas de pantalla y otras imágenes] utilizadas con permiso bajo la licencia https://github.com/btcpayserver/btcpayserver-media/blob/master/LICENSE[MIT License]:
+
+[quote]
+____
+Licencia MIT
+
+Copyright (c) 2018 BTCPay Server
+
+Por la presente se concede permiso, sin cargo alguno, a cualquier persona que obtenga una copia de este software y los archivos de documentación asociados (el "Software"), para comerciar con el Software sin restricciones, incluidos, sin limitación, los derechos de uso, copia, modificación, fusión, publicación, distribución, sublicencia y/o venta de copias del Software, y para permitir que las personas a las que se les proporciona el Software lo hagan, con sujeción a las siguientes condiciones:
+
+El anterior aviso de copyright y este aviso de permiso se incluirán en todas las copias o partes sustanciales del Software.
+
+EL SOFTWARE SE PROPORCIONA "TAL CUAL", SIN GARANTÍA DE NINGÚN TIPO, EXPRESA O
+IMPLÍCITA, INCLUYENDO PERO SIN LIMITARSE A LAS GARANTÍAS DE COMERCIABILIDAD
+IDONEIDAD PARA UN FIN DETERMINADO Y NO INFRACCIÓN. EN NINGÚN CASO LOS AUTORES
+LOS AUTORES O LOS TITULARES DE LOS DERECHOS DE AUTOR SERÁN RESPONSABLES DE CUALQUIER RECLAMACIÓN, DAÑO U OTRA
+RESPONSABILIDAD, YA SEA EN UNA ACCIÓN DE CONTRATO, AGRAVIO O DE OTRO TIPO, QUE SURJA DE,
+O EN RELACIÓN CON EL SOFTWARE O EL USO U OTRAS OPERACIONES CON EL
+SOFTWARE.
+____
+
+=== Lamassu Industries AG.
+
+Las imágenes del https://lamassu.is/product/gaia[_Gaia_ Bitcoin ATM] que se ven en <<bitcoin-atm>> se utilizan con permiso de Lamassu Industries AG. El uso de estas imágenes no es una aprobación del producto o de la empresa, sino que se proporcionan como un ejemplo visual de un cajero automático de Bitcoin.

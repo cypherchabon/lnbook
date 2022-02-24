@@ -1,0 +1,895 @@
+[[onion_routing]]
+== Onion routing.
+
+En este capítulo describiremos el mecanismo de onion routing de la Lightning Network. La invención del _onion routing_ precede a la Lightning Network en 25 años. El onion routing fue inventado por investigadores de la Marina estadounidense como protocolo de seguridad de las comunicaciones. El onion routing es más famoso por Tor, la superposición de Internet con onion routing que permite a los investigadores, activistas, agentes de inteligencia y a todos los demás utilizar Internet de forma privada y anónima.
+
+En este capítulo nos centramos en la parte de "Source-based onion routing (SPHINX)" de la arquitectura del protocolo Lightning, resaltada por un esquema en el centro (capa de enrutamiento) de <<LN_protocol_onion_highlight>>. 
+
+[[LN_protocol_onion_highlight]]
+.Onion routing in the Lightning protocol suite
+image::images/mtln_1001.png["Onion routing in the Lightning protocol suite"]
+
+El onion routing describe un método de comunicación encriptada en el que el emisor de un mensaje construye sucesivas capas de encriptación anidadas que son "peladas" por cada nodo intermediario, hasta que la capa más interna es entregada al destinatario. El nombre "onion routing" describe este uso de la encriptación por capas que se van pelando de una en una, como la piel de una onion.
+
+Cada uno de los nodos intermediarios sólo puede "pelar" una capa y ver quién es el siguiente en la ruta de comunicación. El onion routing garantiza que nadie, excepto el remitente, conozca el destino o la longitud de la ruta de comunicación. Cada intermediario sólo conoce el salto anterior y el siguiente.
+
+La Lightning Network utiliza una implementación del protocolo de onion routing basada en Sphinx,footnote:[George Danezis e Ian Goldberg, "Sphinx: A Compact and Provably Secure Mix Format", en _IEEE Symposium on Security and Privacy_ (Nueva York: IEEE, 2009), 269-282.] desarrollado en 2009 por George Danezis e Ian Goldberg.
+
+La implementación del onion routing en la Lightning Network se define en https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md[BOLT #4: Onion Routing Protocol].
+
+=== Un ejemplo físico que ilustra el onion routing.
+
+Hay muchas maneras de describir el onion routing, pero una de las más fáciles es utilizar el equivalente físico de los sobres cerrados. Un sobre representa una capa de encriptación, que sólo permite al destinatario nombrado abrirlo y leer el contenido.
+
+Digamos que Alicia quiere enviar una carta secreta a Dina, indirectamente a través de algunos intermediarios.
+
+==== Selección de una ruta.
+
+La Lightning Network utiliza el _enrutamiento de origen_, lo que significa que la ruta de pago es seleccionada y especificada por el remitente, y sólo por el remitente. En este ejemplo, la carta secreta de Alice a Dina será el equivalente a un pago. Para asegurarse de que la carta llega a Dina, Alice creará una ruta desde ella hasta Dina, utilizando a Bob y Chan como intermediarios.
+
+[TIP]
+====
+Puede haber muchos caminos que hagan posible que Alice llegue a Dina. Explicaremos el proceso de selección del camino _óptimo_ en <<path_finding>>. Por ahora, supondremos que el camino seleccionado por Alice utiliza a Bob y Chan como intermediarios para llegar a Dina.
+====
+
+[role="pagebreak-before"]
+Como recordatorio, el camino seleccionado por Alice se muestra en <<alice_dina_path>>. 
+
+[[alice_dina_path]]
+.Path: Alice to Bob to Chan to Dina
+image::images/mtln_1002.png["Alice to Bob to Chan to Dina"]
+
+Veamos cómo Alice puede utilizar esta ruta sin revelar información a los intermediarios Bob y Chan.
+
+.Source-Based Routing
+****
+El enrutamiento basado en la fuente no es la forma en que los paquetes se enrutan típicamente en Internet hoy en día, aunque el enrutamiento de la fuente fue posible en los primeros días.
+El enrutamiento en Internet se basa en la "conmutación de paquetes" en cada nodo de enrutamiento intermedio. Un paquete IPv4, por ejemplo, incluye las direcciones IP del remitente y del destinatario, y cada uno de los otros nodos de enrutamiento IP decide cómo reenviar cada paquete hacia el destino.
+Sin embargo, la falta de privacidad de este mecanismo de enrutamiento, en el que cada nodo intermediario ve al remitente y al destinatario, lo convierte en una mala opción para su uso en una red de pago.
+****
+
+==== Construyendo las capas.
+
+Alice comienza escribiendo una carta secreta a Dina.  A continuación, sella la carta dentro de un sobre y escribe "Para Dina" en el exterior (véase <<dina_envelope>>). El sobre representa la encriptación con la clave pública de Dina para que sólo Dina pueda abrir el sobre y leer la carta.
+
+[[dina_envelope]]
+.Dina's secret letter, sealed in an envelope
+image::images/mtln_1003.png["Dina's secret letter, sealed in an envelope"]
+
+La carta de Dina será entregada a Dina por Chan, que está inmediatamente antes de Dina en el "camino". Así, Alice pone el sobre de Dina dentro de un sobre dirigido a Chan (ver <<chan_envelope>>). La única parte que Chan puede leer es el destino (instrucciones de enrutamiento): "Para Dina". Sellar esto dentro de un sobre dirigido a Chan representa encriptarlo con la clave pública de Chan para que sólo Chan pueda leer la dirección del sobre. Chan sigue sin poder abrir el sobre de Dina. Todo lo que ve son las instrucciones en el exterior (la dirección). 
+
+[[chan_envelope]]
+.Chan's envelope, containing Dina's sealed envelope
+image::images/mtln_1004.png["Chan's envelope, containing Dina's sealed envelope"]
+
+Ahora, esta carta será entregada a Chan por Bob. Así que Alice la pone dentro de un sobre dirigido a Bob (ver <<bob_envelope>>). Como antes, el sobre representa un mensaje encriptado para Bob que sólo éste puede leer. Bob sólo puede leer el exterior del sobre de Chan (la dirección), por lo que sabe que debe enviarlo a Chan.
+
+[[bob_envelope]]
+.Bob's envelope, containing Chan's sealed envelope
+image::images/mtln_1005.png["Bob's envelope, containing Chan's sealed envelope"]
+
+Ahora, si pudiéramos mirar a través de los sobres (¡con rayos X!) veríamos los sobres anidados uno dentro de otro, como se muestra en <<nested_envelopes>>. 
+
+[[nested_envelopes]]
+.Nested envelopes
+image::images/mtln_1006.png[Nested envelopes]
+
+==== Pelando las capas.
+
+Alice tiene ahora un sobre que dice "Para Bob" en el exterior. Representa un mensaje encriptado que sólo Bob puede abrir (descifrar). Alice comenzará ahora el proceso enviando esto a Bob. Todo el proceso se muestra en <<sending_nested_envelopes>>. 
+
+[[sending_nested_envelopes]]
+.Sending the envelopes
+image::images/mtln_1007.png[Sending the envelopes]
+
+Como puedes ver, Bob recibe el sobre de Alice. Sabe que viene de Alice, pero no sabe si Alice es la remitente original o sólo alguien que reenvía sobres. Lo abre y encuentra un sobre dentro que dice "Para Chan". Como está dirigido a Chan, Bob no puede abrirlo. No sabe qué hay dentro y no sabe si Chan está recibiendo una carta u otro sobre para reenviar. Bob no sabe si Chan es el destinatario final o no. Bob reenvía el sobre a Chan.
+
+Chan recibe el sobre de Bob. No sabe que viene de Alice. No sabe si Bob es un intermediario o el remitente de la carta. Chan abre el sobre y encuentra otro sobre con la dirección "Para Dina", que no puede abrir. Chan lo reenvía a Dina, sin saber si ésta es la destinataria final.
+
+Dina recibe un sobre de Chan. Al abrirlo, encuentra una carta en su interior, por lo que ahora sabe que ella es la destinataria del mensaje. Lee la carta, sabiendo que ninguno de los intermediarios sabe de dónde procede y que nadie más ha leído su carta secreta.
+
+Esta es la esencia del "onion routing". El remitente envuelve un mensaje en capas, especificando exactamente cómo será enrutado e impidiendo que ninguno de los intermediarios obtenga información sobre la ruta o la carga útil. Cada intermediario pela una capa, ve sólo una dirección de reenvío y no sabe nada más que el salto anterior y el siguiente en la ruta.
+
+Ahora, veamos los detalles de la implementación del onion routing en la Lightning Network.
+
+=== Introducción al onion routing de los HTLC.
+
+El onion routing en la Lightning Network parece complejo a primera vista, pero una vez que se entiende el concepto básico, es realmente muy sencillo.
+
+Desde un punto de vista práctico, Alice le dice a cada nodo intermediario qué HTLC debe establecer con el siguiente nodo de la ruta.
+
+El último nodo, que es el receptor del pago o Dina en nuestro ejemplo, se denomina _nodo final_.
+
+Cada nodo intermediario, o Bob y Chan en nuestro ejemplo, se llama _salto_. Cada salto debe establecer una _LLC de salida_ hacia el siguiente salto. La información comunicada a cada salto por Alice se llama _carga útil del salto_ o _datos del salto_. El mensaje que se encamina desde Alice a Dina se llama _onion_ y consiste en mensajes encriptados de _carga útil del salto_ o _datos del salto_ a cada salto.
+
+Ahora que conocemos la terminología utilizada en el onion routing Lightning, vamos a replantear la tarea de Alice: Alice debe construir una onion con datos de salto, indicando a cada salto cómo construir un HTLC saliente para enviar un pago al nodo final (Dina).
+
+==== Alice selecciona la ruta.
+
+A partir del "enrutamiento" sabemos que Alice enviará un pago de 50.000 satoshi a Dina a través de Bob y Chan. Este pago se transmite a través de una serie de HTLCs, como se muestra en <<alice_dina_htlc_path>>. 
+
+[[alice_dina_htlc_path]]
+.Payment path with HTLCs from Alice to Dina
+image::images/mtln_1008.png[Payment path with HTLCs from Alice to Dina]
+
+Como veremos en <<gossip>>, Alice es capaz de construir esta ruta hacia Dina porque los nodos Lightning anuncian sus canales a toda la Lightning Network utilizando el protocolo Lightning Gossip. Después del anuncio inicial del canal, Bob y Chan enviaron cada uno un mensaje adicional `channel_update` con su tarifa de enrutamiento y sus expectativas de bloqueo de tiempo para el enrutamiento de pago.
+
+A partir de los anuncios y actualizaciones, Alice conoce la siguiente información sobre los canales entre Bob, Chan y Dina:
+
+* Un +short_channel_id+ (ID de canal corto) para cada canal, que Alice puede usar para referenciar el canal cuando construye la ruta
+
+* Un +cltv_expiry_delta+ (delta de bloqueo de tiempo), que Alice puede añadir al tiempo de expiración de cada HTLC
+
+* A +fee_base_msat+ y +fee_proportional_millionths+, que Alice puede utilizar para calcular la tarifa total de enrutamiento esperada por ese nodo para la retransmisión en ese canal.
+
+En la práctica, también se intercambia otra información, como los HTLCs más grandes (`htlc_maximum_msat`) y más pequeños (`htlc_minimum_msat`) que un canal transportará, pero estos no se utilizan tan directamente durante la construcción de la ruta de la onion como los campos anteriores.
+
+Esta información es utilizada por Alice para identificar los nodos, canales, fees y timelocks para la siguiente ruta detallada, mostrada en <<alice_dina_path_detail>>. 
+
+[[alice_dina_path_detail]]
+.A detailed path constructed from gossiped channel and node information
+image::images/mtln_1009.png[A path constructed from gossiped channel and node information]
+
+Alice ya conoce su propio canal hacia Bob y por lo tanto no necesita esta información para construir la ruta. Observa también que Alice no necesita una actualización del canal de Dina porque tiene la actualización de Chan para ese último canal en la ruta.
+
+==== Alice construye las cargas útiles.
+
+Un formato heredado de longitud fija llamado _datos del salto_ y un formato más flexible basado en valores de longitud de tipo (TLV) llamado _carga útil del salto_. El formato de mensaje TLV se explica con más detalle en <<tlv>>. Ofrece flexibilidad al permitir que se añadan campos al protocolo a voluntad.
+
+[NOTE]
+====
+Ambos formatos están especificados en https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#packet-structure[BOLT #4: Onion Routing Protocol, Packet Structure].
+====
+
+Alice comenzará a construir los datos de los saltos desde el final de la ruta hacia atrás: Dina, Chan, luego Bob.
+
+===== Carga útil del nodo final para Dina.
+
+Alice construye primero la carga útil que será entregada a Dina. Dina no construirá un "HTLC saliente", porque Dina es el nodo final y el receptor del pago. Por esta razón, la carga útil para Dina es diferente a todas las demás (utiliza todos los ceros para el "short_channel_id"), pero sólo Dina lo sabrá porque estará encriptada en la capa más interna de la onion. Esencialmente, esta es la "carta secreta a Dina" que vimos en nuestro ejemplo del sobre físico.
+
+La carga útil del salto para Dina debe coincidir con la información de la invoice generada por Dina para Alice y contendrá (al menos) los siguientes campos en formato TLV:
+
++amt_to_forward+:: El importe de este pago en milisatoshis. Si se trata de una sola parte de un pago de varias partes, el importe es inferior al total. En caso contrario, se trata de un único pago completo y es igual al importe de la invoice y al valor de +total_msat+.
+
++valor_cltv+ de salida:: El plazo de caducidad del pago fijado en el valor +min_final_cltv_expiry+ de la invoice.
+
++secreto_de_pago+:: Un valor secreto especial de 256 bits de la invoice, que permite a Dina reconocer este pago entrante. Esto también evita una clase de sondeo que anteriormente hacía inseguras las facturas de valor cero. El sondeo por parte de los nodos intermedios se mitiga, ya que este valor está cifrado para _sólo_ el destinatario, lo que significa que no pueden reconstruir un paquete final que "parezca" legítimo.
+
++total_msat+:: El importe total que corresponde a la invoice. Puede omitirse si sólo hay una parte, en cuyo caso se asume que coincide con +amt_to_forward+ y debe ser igual al importe de la invoice.
+
+La invoice que Alice recibió de Dina especificaba el importe como 50.000 satoshis, que son 50.000.000 milisatoshis. Dina especificó la caducidad mínima para el pago +min_final_cltv_expiry+ como 18 bloques (3 horas, dados los bloques de Bitcoin de 10 minutos de media). En el momento en que Alice intenta realizar el pago, digamos que la blockchain de Bitcoin ha registrado 700.000 bloques. Así que Alice debe establecer el +outgoing_cltv_value+ a una altura de bloque _mínima_ de 700.018.
+
+Alice construye el payload del salto para Dina como sigue:
+
+----
+amt_to_forward : 50,000,000
+outgoing_cltv_value: 700,018
+payment_secret: fb53d94b7b65580f75b98f10...03521bdab6d519143cd521d1b3826
+total_msat: 50,000,000
+----
+
+Alice lo serializa en formato TLV, como se muestra (simplificado) en <<dina_onion_payload>>. 
+
+[[dina_onion_payload]]
+.Dina's payload is constructed by Alice
+image::images/mtln_1010.png[Dina's payload is constructed by Alice]
+
+===== Carga útil de saltos para Chan.
+
+A continuación, Alice construye la carga útil del salto para Chan. Esto le dirá a Chan cómo configurar un HTLC saliente hacia Dina.
+
+La carga útil de salto para Chan incluye tres campos: +id_corto_canal+, +amt_to_forward+, y +outgoing_cltv_value+:
+
+----
+short_channel_id: 010002010a42be
+amt_to_forward: 50,000,000
+outgoing_cltv_value: 700,018
+----
+
+Alice serializa esta carga útil en formato TLV, como se muestra (simplificado) en <<chan_onion_payload>>. 
+
+[[chan_onion_payload]]
+.Chan's payload is constructed by Alice
+image::images/mtln_1011.png[Chan's payload is constructed by Alice]
+
+===== Carga útil del salto para Bob.
+
+Finalmente, Alice construye el payload de salto para Bob, que también contiene los mismos tres campos que el payload de salto para Chan, pero con valores diferentes:
+
+----
+short_channel_id: 000004040a61f0
+amt_to_forward: 50,100,000
+outgoing_cltv_value: 700,038
+----
+
+Como puedes ver, el campo +amt_to_forward+ es de 50.100.000 milisatoshis, es decir, 50.100 satoshis. Esto se debe a que Chan espera una comisión de 100 satoshis para encaminar un pago a Dina. Para que Chan "gane" esa comisión de enrutamiento, el HTLC entrante de Chan debe ser 100 satoshis más que el HTLC saliente de Chan. Como el HTLC de entrada de Chan es el HTLC de salida de Bob, las instrucciones a Bob reflejan la comisión que gana Chan. En términos sencillos, hay que decirle a Bob que envíe 50.100 satoshi a Chan, para que éste pueda enviar 50.000 satoshi y quedarse con 100 satoshi.
+
+Del mismo modo, Chan espera un delta de bloqueo de tiempo de 20 bloques. Así que el HTLC entrante de Chan debe expirar 20 bloques _más tarde_ que el HTLC saliente de Chan. Para lograr esto, Alice le dice a Bob que haga que su HTLC saliente a Chan expire a una altura de bloque de 700.038-20 bloques más tarde que el HTLC de Chan a Dina.
+
+[TIP]
+====
+Las expectativas de tasas y delta de bloqueo de tiempo para un canal son establecidas por la diferencia entre los HTLCs entrantes y salientes. Puesto que el HTLC entrante es creado por el _nodo precedente_, el honorario y el delta del timelock se fijan en el payload de la onion a ese nodo precedente. A Bob se le indica cómo hacer un HTLC que cumpla con las expectativas de tasa y timelock de Chan.
+====
+
+Alice serializa este payload en formato TLV, como se muestra (simplificado) en <<bob_onion_payload>>. 
+
+[[bob_onion_payload]]
+.Bob's payload is constructed by Alice
+image::images/mtln_1012.png[Bob's payload is constructed by Alice]
+
+===== Cargas útiles de salto terminadas.
+
+Alice ha construido ahora las tres cargas útiles de salto que se envolverán en una onion. Una vista simplificada de las cargas útiles se muestra en <<onion_hop_payloads>>.
+
+[[onion_hop_payloads]]
+.Hop payloads for all the hops
+image::images/mtln_1013.png[Hop payloads for all the hops]
+
+[role="pagebreak-before less_space"]
+==== Generación de claves.
+
+Alice debe ahora generar varias claves que se utilizarán para cifrar las distintas capas de la onion.
+
+Con estas claves, Alice puede conseguir un alto grado de privacidad e integridad:
+
+* Alice puede encriptar cada capa de la onion para que sólo el destinatario previsto pueda leerla.
+* Cada intermediario puede comprobar que el mensaje no ha sido modificado.
+* Nadie en el camino sabrá quién envió esta onion o a dónde va. Alice no revela su identidad como remitente ni la de Dina como destinataria.
+* Cada salto sólo conoce el anterior y el siguiente.
+* Nadie puede saber cuán largo es el camino, o en qué parte del camino se encuentra.
+
+[WARNING]
+====
+Como una onion picada, los siguientes detalles técnicos pueden hacerte llorar. Siéntase libre de saltar a la siguiente sección si se confunde. Vuelve a esto y lee https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#packet-construction[BOLT #4: Onion Routing, Packet Construction], si quieres aprender más.
+====
+
+
+La base de todas las claves usadas en la onion es un _secreto compartido_ que Alice y Bob pueden generar independientemente usando el algoritmo de Curva Elíptica Diffie-Hellman (ECDH). A partir del secreto compartido (ss), pueden generar independientemente cuatro claves adicionales denominadas ++rho++, ++mu++, ++um++ y ++pad++:
+
+++rho++:: Se utiliza para generar un flujo de bytes aleatorios a partir de un cifrado de flujo (utilizado como CSPRNG). Estos bytes se utilizan para encriptar/desencriptar el cuerpo del mensaje, así como los bytes de relleno cero durante el procesamiento de paquetes Sphinx.
+
+++mu++:: Utilizado en el código de autenticación de mensajes basado en hash (HMAC) para la verificación de integridad/autenticidad.
+
+++um++:: Utilizado en la notificación de errores.
+
+++pad++:: Utilizado para generar bytes de relleno para rellenar la onion a una longitud fija.
+
+La relación entre las distintas claves y cómo se generan está diagramada en <<onion_keygen>>. 
+
+[[onion_keygen]]
+.Onion key generation
+image::images/mtln_1014.png[Onion Key Generation]
+
+[[session_key]]
+===== La clave de sesión de Alice.
+
+Para evitar revelar su identidad, Alice no utiliza la clave pública de su propio nodo para construir la onion. En su lugar, Alice crea una clave temporal de 32 bytes (256 bits) llamada _clave privada de sesión_ y la correspondiente _clave pública de sesión_. Esto sirve como "identidad" y clave temporal _sólo para esta cebolla_. A partir de esta clave de sesión, Alice construirá todas las demás claves que se utilizarán en esta onion. 
+
+[[keygen_details]]
+===== Detalles de la generación de claves.
+La generación de claves, la generación de bytes aleatorios, las claves efímeras y cómo se utilizan en la construcción de paquetes se especifican en tres secciones de BOLT #4:
+
+* https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#key-generation[Generación de claves]]
+* https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#pseudo-random-byte-stream[Flujo de bytes aleatorios]
+* https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#packet-construction[Construcción de paquetes]
+
+Para simplificar y evitar ponernos demasiado técnicos, no hemos incluido estos detalles en el libro. Consulta los enlaces anteriores si quieres ver el funcionamiento interno.
+
+[[shared_secret]]
+===== Generación de secretos compartidos.
+
+Se basa en la invención del intercambio de claves Diffie-Hellman (DH) en los años 70, que revolucionó la criptografía. El enrutamiento de onions de Lightning utiliza la curva elíptica Diffie-Hellman (ECDH) en la curva +secp256k1+ de Bitcoin. Es un truco tan genial que intentamos explicarlo en términos sencillos en <<ecdh_explained>>. 
+
+
+// Para el editor: ¿Tal vez poner esto en un apéndice en lugar de una barra lateral?
+
+[[ecdh]]
+[[ecdh_explained]]
+.Elliptic Curve Diffie–Hellman Explained
+****
+Assume Alice's private key is _a_ and Bob's private key is _b_. Using the elliptic curve, Alice and Bob each multiply their private key by the generator point _G_ to produce their public keys _A_ and _B_, respectively:
+
+++++
+<ul class="simplelist">
+<li><em>A</em> = <em>aG</em></li>
+<li><em>B</em> = <em>bG</em></li>
+</ul>
+++++
+
+Now Alice and Bob can use _Elliptic Curve Diffie–Hellman Key Exchange_ to create a shared secret _ss_, a value that they can both calculate independently without exchanging any information
+
+The shared secret _ss_ is calculated by each by multiplying their own private key with the _other's_ public key, such that:
+
+++++
+<ul class="simplelist">
+<li><em>ss</em> = <em>aB</em> = <em>bA</em></li>
+</ul>
+++++
+
+But why would these two multiplications result in the same value _ss_?
+Follow along, as we demonstrate the math that proves this is possible:
+
+++++
+<ul class="simplelist">
+<li><em>ss</em></li>
+<li>= <em>aB</em></li>
+</ul>
+++++
+
+calculated by Alice who knows both _a_ (her private key) and _B_ (Bob's public key)
+
+++++
+<ul class="simplelist">
+<li>= <em>a</em>(<em>bG</em>)</li>
+</ul>
+++++
+
+because we know that _B_ = _bG_, we substitute
+
+++++
+<ul class="simplelist">
+<li> = (<em>ab</em>)<em>G</em></li>
+</ul>
+++++
+
+because of associativity, we can move the parentheses
+
+++++
+<ul class="simplelist">
+<li>= (<em>ba</em>)<em>G</em></li>
+</ul>
+++++
+
+because _xy_ = _yx_ (the curve is an abelian group)
+
+++++
+<ul class="simplelist">
+<li>= <em>b</em>(<em>aG</em>)</li>
+</ul>
+++++
+
+because of associativity, we can move the parentheses
+
+++++
+<ul class="simplelist">
+<li>= <em>bA</em></li>
+</ul>
+++++
+
+and we can substitute _aG_ with _A_.
+
+The result _bA_ can be calculated independently by Bob who knows _b_ (his private key) and _A_ (Alice's public key).
+
+We have therefore shown that:
+
+++++
+<ul class="simplelist">
+<li><em>ss</em> = <em>aB</em> (Alice can calculate this)</li>
+<li><em>ss</em> = <em>bA</em> (Bob can calculate this)</li>
+</ul>
+++++
+
+Thus, they can each independently calculate _ss_ which they can use as a shared key to symmetrically encrypt secrets between the two of them without communicating the shared secret.
+
+****
+
+A unique trait of Sphinx as a mix-net packet format is that rather than include a distinct session key for each hop in the route, which would increase the size of the mix-net packet dramatically, a clever _blinding_ scheme is used to deterministically randomize the session key at each hop.
+
+In practice, this little trick allows us to keep the onion packet as compact as possible while still retaining the desired security properties.
+
+The session key for hop `i` is derived using the node public key, and derived shared secret of hop `i – 1`:
+```
+session_key_i = session_key_{i-1} * SHA-256(node_pubkey_{i-1} || shared_secret_{i-1})
+```
+
+En otras palabras, tomamos la clave de sesión del salto anterior y la multiplicamos por un valor derivado de la clave pública y el secreto compartido derivado para ese salto.
+
+Como la multiplicación por curva elíptica puede realizarse sobre una clave pública sin conocer la clave privada, cada salto puede volver a aleatorizar la clave de sesión para el siguiente salto de forma determinista.
+
+El creador del paquete onion conoce todos los secretos compartidos (ya que ha cifrado el paquete de forma única para cada salto), y por lo tanto es capaz de derivar todos los factores de cegamiento.
+
+Este conocimiento les permite derivar todas las claves de sesión utilizadas por adelantado durante la generación del paquete.
+
+Ten en cuenta que el primer salto utiliza la clave de sesión original generada porque esta clave se utiliza para iniciar el cegamiento de la clave de sesión por cada salto posterior
+
+
+[[wrapping_the_onion]]
+=== Envolviendo las capas de la onion.
+
+El proceso de envolver la onion se detalla en https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#packet-construction[BOLT #4: Enrutamiento de la onion, construcción de paquetes].
+
+En esta sección describiremos este proceso a un nivel alto y algo simplificado, omitiendo ciertos detalles.
+ 
+
+[[fixed_length_onions]]
+==== Cebollas de longitud fija.
+
+Hemos mencionado el hecho de que ninguno de los nodos de "salto" sabe la longitud del camino, ni en qué parte del mismo se encuentra. ¿Cómo es esto posible?
+
+Si tienes un conjunto de direcciones, aunque estén encriptadas, ¿no puedes saber a qué distancia estás del principio o del final simplemente mirando _en qué lugar_ de la lista de direcciones te encuentras?
+
+El truco utilizado en el onion routing es hacer que la ruta (la lista de direcciones) tenga siempre la misma longitud para cada nodo. Esto se consigue manteniendo el paquete onion de la misma longitud en cada paso.
+
+En cada salto, la carga útil del salto aparece al principio de la carga útil de la onion, seguida de _lo que parecen ser_ 19 cargas útiles de saltos más. Cada salto se ve como el primero de 20 saltos.
+
+[TIP]
+====
+La carga útil de la onion es de 1.300 bytes. Cada carga útil de salto es de 65 bytes o menos (rellenado a 65 bytes si es menor). Por lo tanto, la carga útil total de la onion puede encajar en 20 cargas útiles de saltos (1300 = 20 & veces; 65). Por lo tanto, la ruta máxima de la onion es de 20 saltos.
+====
+
+A medida que se "pela" cada capa, se añaden más datos de relleno (esencialmente basura) al final de la carga útil de la onion, de modo que el siguiente salto recibe una onion del mismo tamaño y vuelve a ser el "primer salto" de la onion.
+
+El tamaño de la onion es de 1.366 bytes, estructurados como se muestra en <<onion_packet>>: 
+
+1 byte:: Un byte de versión
+33 bytes:: Una clave de sesión pública comprimida (<<session_key>>) a partir de la cual se puede generar el secreto compartido por salto (<<shared_secret>>) sin revelar la identidad de Alice
+1.300 bytes:: La carga útil real de la _onión_ que contiene las instrucciones para cada salto
+32 bytes:: Una suma de control de integridad HMAC
+
+[[onion_packet]]
+.The onion packet
+image::images/mtln_1015.png[]
+
+Un rasgo único de Sphinx como formato de paquete mixto es que en lugar de incluir una clave de sesión distinta para cada salto en la ruta, lo que aumentaría el tamaño del paquete mixto dramáticamente, en su lugar se utiliza un esquema inteligente de _blinding_ para aleatorizar de forma determinista la clave de sesión en cada salto.
+
+En la práctica, este pequeño truco nos permite mantener el paquete onion tan compacto como sea posible mientras se mantienen las propiedades de seguridad deseadas.
+
+==== Envoltura de la Cebolla (Esquema).
+
+Aquí está el proceso de envolver la onion, esbozado a continuación. Vuelve a esta lista cuando exploremos cada paso con nuestro ejemplo del mundo real.
+
+Para cada salto, el remitente (Alice) repite el mismo proceso:
+
+1. Alice genera el secreto compartido por salto y las claves ++rho++, ++mu++ y ++pad++.
+
+2. Alice genera 1.300 bytes de relleno y rellena el campo de carga útil de onion de 1.300 bytes con este relleno.
+
+3. Alice calcula el HMAC para la carga útil del salto (ceros para el salto final).
+
+4. Alice calcula la longitud de la carga útil del salto + HMAC + espacio para almacenar la propia longitud.
+
+5. Alice _desplaza a la derecha_ la carga útil de la onion en el espacio calculado necesario para que quepa la carga útil del salto. Los datos de "relleno" de la derecha se descartan, dejando suficiente espacio a la izquierda para la carga útil.
+
+6. Alice inserta la longitud + la carga útil del salto + el HMAC en la parte delantera del campo de carga útil en el espacio creado por el desplazamiento del relleno.
+
+7. Alice utiliza la clave ++rho++ para generar una almohadilla de un solo uso de 1.300 bytes.
+
+8. Alice ofusca toda la carga útil de la onion mediante XOR con los bytes generados de ++rho++.
+
+9. Alice calcula el HMAC de la carga útil de la onion, utilizando la clave ++mu++.
+
+10. Alice añade la clave pública de la sesión (para que el salto pueda calcular el secreto compartido).
+
+11. Alice añade el número de versión.
+
+12. Alice vuelve a cifrar de forma determinista la clave de sesión utilizando un valor derivado del hash del secreto compartido y de la clave pública del salto anterior.
+
+A continuación, Alice repite el proceso. Se calculan las nuevas claves, se desplaza la carga útil de la onion (dejando caer más basura), se añade la carga útil del nuevo salto al frente, y se cifra toda la carga útil de la onion con el flujo de bytes ++rho++ para el siguiente salto.
+
+Para el salto final, el HMAC incluido en el paso 3 sobre las instrucciones de texto plano es en realidad _todo cero_.
+El salto final utiliza esta señal para determinar que efectivamente es el último salto de la ruta.
+Alternativamente, también se puede utilizar el hecho de que el `short_chan_id` incluido en la carga útil para denotar el "siguiente salto" es todo cero.
+
+Nótese que en cada fase la clave ++mu++ se utiliza para generar un HMAC sobre el paquete de onion _encriptado_ (desde el punto de vista del nodo que procesa la carga útil), así como sobre el contenido del paquete con una sola capa de encriptación eliminada.
+Este HMAC externo permite al nodo que procesa el paquete verificar la integridad del paquete onion (sin bytes modificados).
+El HMAC interno se revela entonces durante la rutina inversa de "cambiar y encriptar" descrita anteriormente, que sirve como el HMAC _externo_ para el siguiente salto. 
+
+==== Envolviendo la carga útil del salto de Dina.
+
+Como recordatorio, la onion se envuelve empezando por el final de la ruta desde Dina, el nodo final o receptor. Luego la ruta se construye en sentido inverso hasta el remitente, Alice.
+
+Alice comienza con un campo vacío de 1.300 bytes, la _carga útil de la cebolla_ de longitud fija. Luego, rellena la carga útil de onion con un flujo de bytes pseudoaleatorio "de relleno" que se genera a partir de la clave ++pad++.
+
+Esto se muestra en <<onion_payload_filler>>. 
+
+[NOTE]
+====
+La generación del flujo de bytes aleatorio utiliza el algoritmo ChaCha20, como generador criptográfico seguro de números pseudoaleatorios (CSPRNG). Dicho algoritmo generará un flujo determinista, largo y no repetitivo de bytes aparentemente aleatorios a partir de una semilla inicial. Los detalles se especifican en https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#pseudo-random-byte-stream[BOLT #4: Onion Routing, Pseudo Random Byte Stream].
+====
+
+[[onion_payload_filler]]
+.Filling the onion payload with a random byte stream
+image::images/mtln_1016.png[]
+
+Alice insertará ahora la carga útil del salto de Dina en el lado izquierdo de la matriz de 1.300 bytes, desplazando el relleno hacia la derecha y descartando todo lo que se desborde. Esto se visualiza en <<onion_add_dina>>. 
+
+[[onion_add_dina]]
+.Adding Dina's hop payload
+image::images/mtln_1017.png[]
+
+Otra forma de ver esto es que Alice mide la longitud de la carga útil del salto de Dina, desplaza el relleno hacia la derecha para crear un espacio igual en el lado izquierdo de la carga útil de la onion, e inserta la carga útil de Dina en ese espacio.
+
+En la siguiente fila vemos el resultado: la carga útil de onion de 1.300 bytes contiene la carga útil de salto de Dina y luego el flujo de bytes de relleno que rellena el resto del espacio.
+
+A continuación, Alice ofusca toda la carga útil de la onion para que _sólo Dina_ pueda leerla.
+
+Para ello, Alice genera un flujo de bytes utilizando la clave ++rho++ (que Dina también conoce). Alice utiliza una exclusiva de bits o (XOR) entre los bits de la carga útil de la onion y el flujo de bytes creado a partir de ++rho++. El resultado aparece como un flujo de bytes aleatorio (o encriptado) de 1.300 bytes de longitud. Este paso se muestra en <<onion_obfuscate_dina>>. 
+
+[[onion_obfuscate_dina]]
+.Obfuscating the onion payload
+image::images/mtln_1018.png[]
+
+Una de las propiedades de XOR es que si lo haces dos veces, vuelves a los datos originales. Como veremos en <<bobDeobfuscates>>, si Dina aplica la misma operación XOR con el flujo de bytes generado a partir de ++rho++, revelará el payload original de la onion.
+
+[TIP]
+====
+XOR es una función _involutiva_, lo que significa que si se aplica dos veces, se deshace. En concreto, XOR(XOR(_a_, _b_), _b_) = _a_. Esta propiedad se utiliza mucho en la criptografía de clave simétrica.
+====
+
+Como sólo Alicia y Dina tienen la clave ++rho++ (derivada del secreto compartido de Alicia y Dina), sólo ellas pueden hacer esto. Efectivamente, esto encripta la carga útil de la onion sólo para los ojos de Dina.
+
+Finalmente, Alice calcula un código de autenticación de mensajes basado en hash (HMAC) para la carga útil de Dina, que utiliza la clave ++mu++ como su clave de inicialización. Esto se muestra en <<dina_hop_payload_hmac>>. 
+
+[[dina_hop_payload_hmac]]
+.Adding an HMAC integrity checksum to Dina's hop payload
+image::images/mtln_1019.png[]
+
+===== Protección y detección de repeticiones en el enrutamiento de Onion.
+
+El HMAC actúa como una suma de comprobación segura y ayuda a Dina a verificar la integridad de la carga útil del salto. El HMAC de 32 bytes se añade a la carga de saltos de Dina.
+Ten en cuenta que calculamos el HMAC sobre los datos _encriptados_ en lugar de sobre los datos en texto plano.
+Esto se conoce como _encrypt-then-mac_ y es la forma recomendada de utilizar una MAC, ya que proporciona tanto la integridad del texto plano como la del texto cifrado.
+
+El cifrado autentificado moderno también permite el uso de un conjunto opcional de bytes de texto plano que también se autentifica, conocido como _datos asociados_.
+En la práctica, esto suele ser algo así como una cabecera de paquete de texto plano u otra información auxiliar.
+Al incluir estos datos asociados en la carga útil que se va a autenticar (MAC), el verificador de la MAC se asegura de que estos datos asociados no han sido manipulados (por ejemplo, cambiando la cabecera de texto plano en un paquete cifrado).
+
+En el contexto de la Lightning Network, estos datos asociados se utilizan para _fortalecer_ la protección contra reproducciones de este esquema.
+Como aprenderemos a continuación, la protección contra repeticiones garantiza que un atacante no pueda _retransmitir_ (reproducir) un paquete en la red y observar su trayectoria resultante.
+En su lugar, los nodos intermedios son capaces de utilizar las medidas de protección de repetición definidas para detectar y rechazar un paquete repetido.
+El formato base de los paquetes Sphinx utiliza un registro de todas las claves secretas efímeras utilizadas para detectar las repeticiones.
+Si una clave secreta se vuelve a utilizar, el nodo puede detectarla y rechazar el paquete. 
+
+La naturaleza de los HTLC en la Lightning Network nos permite reforzar aún más la protección contra la repetición añadiendo un incentivo _económico_ adicional.
+Recuerda que el hash de pago de un HTLC sólo puede utilizarse de forma segura (para un pago completo) una vez.
+Si un hash de pago se utiliza de nuevo y atraviesa un nodo que ya ha visto el secreto de pago para ese hash, ¡entonces pueden simplemente sacar los fondos y cobrar la cantidad completa del pago sin reenviar!
+Podemos utilizar este hecho para reforzar la protección contra repeticiones exigiendo que el _hash de pago_ se incluya en nuestro cálculo HMAC como dato asociado.
+Con este paso añadido, intentar reproducir un paquete onion también requiere que el remitente se comprometa a utilizar el _mismo_ hash de pago.
+Como resultado, además de la protección normal contra la repetición, un atacante también puede perder la cantidad total del HTLC reproducido.
+
+Una de las cuestiones que hay que tener en cuenta con el creciente conjunto de claves de sesión almacenadas para la protección contra repeticiones es: ¿son los nodos capaces de recuperar este espacio?
+En el contexto de la Lightning Network, la respuesta es: sí.
+Una vez más, debido a los atributos únicos de la construcción HTLC, podemos hacer una mejora adicional sobre el protocolo base Sphinx.
+Dado que los HTLC son contratos con _tiempo bloqueado_ basados en la altura absoluta del bloque, una vez que un HTLC ha expirado, el contrato queda cerrado de forma permanente.
+Como resultado, los nodos pueden usar esta altura de expiración de CLTV (operador CHECKLOCKTIMEVERIFY) como un indicador para saber cuándo es seguro recolectar la basura de una entrada en el registro anti-reproducción.
+
+==== Envoltura de la carga útil del salto de Chan.
+
+En <<chan_onion_wrapping>> vemos los pasos utilizados para envolver el hop payload de Chan en la onion. Estos son los mismos pasos que Alice utilizó para envolver la carga útil del salto de Dina.
+
+[[chan_onion_wrapping]]
+.Wrapping the onion for Chan
+image::images/mtln_1020.png[]
+
+Alice comienza con la carga útil de onion de 1.300 creada para Dina. Los primeros 65 (o menos) bytes de esto son la carga útil de Dina ofuscada y el resto es relleno. Alice debe tener cuidado de no sobrescribir la carga útil de Dina.
+
+A continuación, Alice necesita localizar la clave pública efímera (que se generó al principio de cada salto) que se añadirá al paquete de enrutamiento en este salto.
+
+Recuerda que en lugar de incluir una clave pública efímera única (que el remitente y el nodo intermedio utilizan en una operación ECDH para generar un secreto compartido), Sphinx utiliza una única clave pública efímera que se aleatoriza de forma determinista en cada salto.
+
+Al procesar el paquete, Dina utilizará su secreto compartido y su clave pública para obtener el valor de cegado (`b_dina`) y lo utilizará para volver a aleatorizar la clave pública efímera, en una operación idéntica a la que realiza Alice durante la construcción inicial del paquete.
+
+Alice añade una suma de comprobación HMAC interna a la carga útil de Chan y la inserta en el "frente" (lado izquierdo) de la carga útil de la onion, desplazando la carga útil existente hacia la derecha en una cantidad igual.
+Recuerda que hay efectivamente _dos_ HMACs usados en el esquema: el HMAC exterior y el HMAC interior.
+En este caso, el HMAC _interior_ de Chan es en realidad el HMAC _exterior_ de Dina.
+
+Ahora la carga útil de Chan está en la parte delantera de la onion. Cuando Chan ve esto, no tiene idea de cuántas cargas útiles vinieron antes o después. ¡Parece el primero de 20 saltos siempre!
+
+Luego, Alice ofusca toda la carga útil por XOR con el flujo de bytes generado por la clave ++rho++ de Alice-Chan. Sólo Alice y Chan tienen esta clave ++rho++, y sólo ellos pueden producir el flujo de bytes para ofuscar y desofuscar la onion.
+Finalmente, como hicimos en el paso anterior, calculamos el HMAC externo de Chan, que es lo que usará para verificar la integridad del paquete de onion encriptado.
+
+==== Envolviendo la carga útil del salto de Bob.
+
+En <<bob_onion_wrapping>> vemos los pasos utilizados para envolver la carga útil del salto de Bob en la onion.
+
+Muy bien, ¡a estas alturas esto es fácil!
+
+Comienza con el payload de la onion (ofuscado) que contiene los payloads de salto de Chan y Dina.
+
+Obtén la clave de sesión para este salto derivada del factor de cegamiento generado por el salto anterior.
+Incluir el HMAC externo del salto anterior como el HMAC interno de este salto.
+Insertar la carga útil del salto de Bob al principio y desplazar todo lo demás a la derecha, eliminando un trozo del tamaño de la carga útil del salto de Bob al final (de todas formas era relleno).
+
+Ofuscar todo el asunto XOR con la clave ++rho++ del secreto compartido Alice-Bob para que sólo Bob pueda desenvolverlo.
+
+Calcula el HMAC exterior y pégalo al final de la carga útil del salto de Bob.
+
+[[bob_onion_wrapping]]
+.Wrapping the onion for Bob
+image::images/mtln_1021.png[]
+
+
+==== El paquete final de la onion.
+
+La carga útil final de la onion está lista para ser enviada a Bob. Alice no necesita añadir más payloads de saltos.
+
+Alice calcula un HMAC para la carga útil de la onion para asegurarla criptográficamente con una suma de control que Bob pueda verificar.
+
+Alice añade una clave de sesión pública de 33 bytes que será utilizada por cada salto para generar un secreto compartido y las claves ++rho++, ++mu++ y ++pad++.
+
+Finalmente Alice pone el número de versión de la onion (+0+ actualmente) en el frente. Esto permite futuras actualizaciones del formato de los paquetes de onion.
+
+El resultado se puede ver en <<onion_packet_2>>.  
+
+[[onion_packet_2]]
+.The onion packet
+image::images/mtln_1015.png[]
+
+=== Envío de la onion.
+
+En esta sección veremos cómo se reenvía el paquete onion y cómo se despliegan los HTLC a lo largo de la ruta.
+
+==== El mensaje update_add_htlc.
+
+Los paquetes Onion se envían como parte del mensaje +update_add_htlc+. Si recuerdas de <<update_add_htlc>>, en <<channel_operation>>, vimos que el contenido del mensaje +update_add_htlc+ es el siguiente:
+
+----
+[channel_id:channel_id]
+[u64:id]
+[u64:amount_msat]
+[sha256:payment_hash]
+[u32:cltv_expiry]
+[1366*byte:onion_routing_packet]
+----
+
+Recordarás que este mensaje es enviado por un socio del canal para pedir al otro socio del canal que añada un HTLC. Así es como Alice pedirá a Bob que añada un HTLC para pagar a Dina. Ahora entiendes el propósito del último campo, +onion_routing_packet+, que tiene 1.366 bytes de longitud. ¡Es el paquete onion completamente envuelto que acabamos de construir!
+
+==== Alice envía la onion a Bob.
+
+Alice enviará el mensaje +update_add_htlc+ a Bob. Veamos lo que contendrá este mensaje:
+
++channel_id+:: Este campo contiene el ID del canal Alice-Bob, que en nuestro ejemplo es +0000031e192ca1+ (ver <<alice_dina_path_detail>>).
+
++id+:: El ID de este HTLC en este canal, empezando por +0+.
+
++importe_msat+:: El importe del HTLC: 50.200.000 milisatoshis.
+
++payment_hash+:: El hash de pago RIPEMD160(SHA-256):
++
++9e017f6767971ed7cea17f98528d5f5c0ccb2c71+.
+
++cltv_expiry+:: El timelock de expiración para el HTLC será de 700,058. Alice añade 20 bloques al conjunto de expiración en la carga útil de Bob según el +cltv_expiry_delta+ negociado por Bob.
+
++paquete_de_enrutamiento+:: El paquete onion final que Alice construyó con todas las cargas útiles de los saltos.
+
+==== Bob comprueba la onion.
+
+Como vimos en <<channel_operation>>, Bob añadirá el HTLC a las transacciones de compromiso y actualizará el estado del canal con Alice.
+
+Bob desenvolverá la onion que recibió de Alice de la siguiente manera:
+
+1. Bob toma la clave de sesión del paquete onion y obtiene el secreto compartido Alice-Bob.
+
+2. Bob genera la clave ++mu++ a partir del secreto compartido y la utiliza para verificar la suma de comprobación HMAC del paquete de onion.
+
+Ahora que Bob ha generado la clave compartida y verificado el HMAC, puede empezar a desenvolver la carga útil de onion de 1.300 bytes dentro del paquete de onion. El objetivo es que Bob recupere su propia carga útil de salto y luego reenvíe el resto de la onion al siguiente salto.
+
+Si Bob extrae y elimina su carga útil de salto, la onion restante no tendrá 1.300 bytes, ¡será más corta! Así, el siguiente salto sabrá que no es el primer salto y podrá detectar la longitud del camino. Para evitar esto, Bob necesita añadir más relleno para rellenar la onion.
+
+==== Bob genera relleno.
+
+Bob genera el relleno de una manera ligeramente diferente a la de Alice, pero siguiendo el mismo principio general.
+
+Primero, Bob _extiende_ la carga útil de la onion en 1.300 bytes y los rellena con valores +0+. Ahora el paquete onion tiene 2.600 bytes, con la primera mitad conteniendo los datos que Alice envió y la siguiente mitad conteniendo ceros. Esta operación se muestra en <<bob_extends>>. 
+
+[[bob_extends]]
+.Bob extends the onion payload by 1,300 (zero-filled) bytes
+image::images/mtln_1023.png["Bob extends the onion payload by 1,300 (zero-filled) bytes"]
+
+Este espacio vacío se ofuscará y se convertirá en "relleno" por el mismo proceso que Bob utiliza para desofuscar su propia carga útil del salto. Veamos cómo funciona.
+
+[[bobDeobfuscates]]
+==== Bob desofusca su carga útil de salto.
+
+A continuación, Bob generará la clave ++rho++ a partir de la clave compartida Alice-Bob. Usará esto para generar un flujo de 2.600 bytes, usando el algoritmo ChaCha20.
+
+[TIP]
+====
+Los primeros 1.300 bytes del flujo de bytes generado por Bob son exactamente los mismos que los generados por Alice usando la clave ++rho++.
+====
+
+A continuación, Bob aplica los 2.600 bytes del flujo de bytes ++rho++ a la carga útil de la onion de 2.600 bytes con una operación XOR a nivel de bits.
+
+Los primeros 1.300 bytes serán desofuscados por esta operación XOR, porque es la misma operación que aplicó Alice y XOR es involuntaria. Así que Bob _revelará_ su carga de salto seguida de algunos datos que parecen revueltos.
+
+Al mismo tiempo, aplicando el flujo de bytes ++rho++ a los 1.300 ceros que se añadieron a la carga útil de la onion los convertirá en datos de relleno aparentemente aleatorios. Esta operación se muestra en <<bob_deobfuscates>>.
+
+[[bob_deobfuscates]]
+.Bob de-obfuscates the onion, obfuscates the filler
+image::images/mtln_1024.png["Bob de-obfuscates the onion, obfuscates the filler"]
+
+==== Bob extrae el HMAC exterior para el siguiente salto.
+
+Recuerda que se incluye un HMAC interno para cada salto, que luego se convertirá en el HMAC externo para el _siguiente_ salto.
+En este caso, Bob extrae el HMAC interno (ya ha verificado la integridad del paquete encriptado con el HMAC externo), y lo pone a un lado porque lo añadirá al paquete desofuscado para permitir a Chan verificar el HMAC de su paquete encriptado. 
+
+==== Bob retira su carga útil y desplaza la onion hacia la izquierda.
+
+Ahora Bob puede eliminar su carga útil de salto de la parte delantera de la onion y desplazar a la izquierda los datos restantes. Una cantidad de datos igual a la carga útil de salto de Bob de la segunda mitad de 1.300 bytes de relleno se desplazará ahora al espacio de carga útil de la onion. Esto se muestra en <<bob_removes_shifts>>. 
+
+Ahora Bob puede mantener la primera mitad de 1.300 bytes, y descartar los 1.300 bytes extendidos (de relleno).
+
+Bob tiene ahora un paquete onion de 1.300 bytes para enviar al siguiente salto. Es casi idéntico a la carga útil de onion que Alice había creado para Chan, excepto que los últimos 65 bytes de relleno fueron puestos por Bob y serán diferentes.
+
+[[bob_removes_shifts]]
+.Bob removes the hop payload and left-shifts the rest, filling the gap with new filler
+image::images/mtln_1025.png["Bob removes the hop payload and left-shifts the rest, filling the gap with new filler"]
+
+[role="pagebreak-before"]
+Nadie puede decir la diferencia entre el relleno puesto por Alice y el relleno puesto por Bob. ¡El relleno es el relleno! De todos modos, todo son bytes aleatorios. Ten en cuenta que si Bob (o uno de los otros alias de Bob) está presente en la ruta en dos lugares distintos, entonces pueden notar la diferencia porque el protocolo base siempre utiliza el mismo hash de pago a través de toda la ruta. Los pagos atómicos multitrayectoria (AMP) y los contratos de tiempo fijo (PTLC) eliminan el vector de correlación al aleatorizar el identificador de pago en cada ruta/salto.
+
+==== Bob construye el nuevo paquete de onion.
+
+Bob ahora copia la carga útil de la onion en el paquete de onion, añade el HMAC externo para chan, vuelve a aleatorizar la clave de sesión (de la misma manera que Alice el remitente) con la operación de multiplicación de la curva elíptica, y añade un byte de versión fresco.
+
+Para volver a aleatorizar la clave de sesión, Bob primero calcula el factor de cegamiento para su salto, utilizando su clave pública de nodo y el secreto compartido que obtuvo:
+```
+b_bob = SHA-256(P_bob || shared_secret_bob)
+```
+
+Una vez generado esto, Bob vuelve a aleatorizar la clave de sesión realizando una multiplicación EC utilizando su clave de sesión y el factor de cegamiento:
+```
+session_key_chan = session_key_bob * b_bob
+```
+
+La clave pública de `clave_de_sesión_chan` será entonces añadida al frente del paquete de onion para ser procesada por Chan.
+
+==== Bob verifica los detalles del HTLC.
+
+La carga útil del salto de Bob contiene las instrucciones necesarias para crear un HTLC para Chan.
+
+En la carga útil del salto, Bob encuentra un +id_corto_canal+, +amt_to_forward+, y +cltv_expiry+.
+
+Primero, Bob comprueba si tiene un canal con ese ID corto. Comprueba que tiene ese canal con Chan.
+
+A continuación, Bob confirma que la cantidad saliente (50.100 satoshis) es menor que la cantidad entrante (50.200 satoshis) y, por lo tanto, se cumplen las expectativas de pago de Bob.
+
+Del mismo modo, Bob comprueba que el +cltv_expiry+ saliente es menor que el +cltv_expiry+ entrante, lo que da a Bob tiempo suficiente para reclamar el HTLC entrante si hay un incumplimiento.
+
+==== Bob envía el update_add_htlc a Chan.
+
+Bob ahora construye y HTLC para enviar a Chan, como sigue:
+
++channel_id+:: Este campo contiene el ID del canal Bob-Chan, que en nuestro ejemplo es +000004040a61f0+ (ver <<alice_dina_path_detail>>).
+
++id+:: El ID de este HTLC en este canal, empezando por +0+.
+
++importe_msat+:: El importe del HTLC: 50.100.000 milisatoshis.
+
++payment_hash+:: El hash de pago RIPEMD160(SHA-256):
++
++9e017f6767971ed7cea17f98528d5f5c0ccb2c71+. 
++
+Esto es lo mismo que el hash de pago del HTLC de Alice.
+
++cltv_expiry+:: El timelock de expiración del HTLC será de 700.038.
+
++paquete_de_enrutamiento+:: El paquete de onion que Bob reconstruyó después de eliminar su carga útil de saltos.
+
+==== Chan reenvía la onion.
+
+Chan repite exactamente el mismo proceso que Bob:
+
+1. Chan recibe el +update_add_htlc+ y procesa la petición HTLC, añadiéndola a las transacciones de compromiso.
+
+2. Chan genera la clave compartida Alice-Chan y la subclave ++mu++.
+
+3. Chan verifica el HMAC del paquete de onion, y luego extrae la carga útil de onion de 1.300 bytes.
+
+4. Chan extiende la carga útil de la onion en 1.300 bytes extra, llenándola de ceros.
+
+5. Chan utiliza la clave ++rho++ para producir 2.600 bytes.
+
+6. Chan utiliza el flujo de bytes generado para XOR y desofuscar la carga útil de la onion. Simultáneamente, la operación XOR ofusca los 1.300 ceros extra, convirtiéndolos en relleno. 
+
+7. Chan extrae el HMAC interno de la carga útil, que se convertirá en el HMAC externo para Dina.
+
+8. Chan elimina su carga útil del salto y desplaza a la izquierda la carga útil de la onion en la misma cantidad. Parte del relleno generado en los 1.300 bytes extendidos se mueve hacia la primera mitad de los 1.300 bytes, convirtiéndose en parte de la carga útil de la onion.
+
+9. Chan construye el paquete onion para Dina con esta carga útil onion.
+
+10. Chan construye un mensaje +update_add_htlc+ para Dina e inserta en él el paquete onion.
+
+11. Chan envía el +update_add_htlc+ a Dina.
+
+12. Chan vuelve a aleatorizar la clave de sesión como hizo Bob en el salto anterior para Dina. 
+
+==== Dina recibe la carga de pago final.
+
+Cuando Dina recibe el mensaje +update_add_htlc+ de Chan, sabe por el +payment_hash+ que se trata de un pago para ella. Sabe que es el último salto de la onion.
+
+Dina sigue exactamente el mismo proceso que Bob y Chan para verificar y desenvolver la onion, excepto que no construye un nuevo relleno y no reenvía nada. En su lugar, Dina responde a Chan con +update_fulfill_htlc+ para canjear el HTLC. El +update_fulfill_htlc+ fluirá hacia atrás a lo largo del camino hasta llegar a Alice. Todos los HTLCs son redimidos y los balances de los canales son actualizados. El pago se ha completado.
+
+=== Devolución de errores.
+
+Hasta ahora hemos visto la propagación hacia adelante de la onion estableciendo los HTLCs y la propagación hacia atrás del secreto de pago desenrollando los HTLCs una vez que el pago es exitoso.
+
+Hay otra función muy importante del enrutamiento de la onion: La devolución de errores. Si hay un problema con el pago, la onion o los saltos, debemos propagar un error hacia atrás para informar a todos los nodos del fallo y deshacer cualquier HTLC.
+
+Los errores se dividen generalmente en tres categorías: fallos de la onion, fallos del nodo y fallos del canal. Además, pueden subdividirse en errores permanentes y transitorios. Por último, algunos errores contienen actualizaciones del canal para ayudar en futuros intentos de entrega de pagos.
+
+[NOTE]
+====
+A diferencia de los mensajes del protocolo peer-to-peer (P2P) (definido en https://github.com/lightningnetwork/lightning-rfc/blob/master/02-peer-protocol.md[BOLT #2: Peer Protocol for Channel Management]), los errores no se envían como mensajes P2P, sino que se envuelven dentro de paquetes de retorno de onion y siguen el camino inverso al de la onion (back-propagating).
+====
+
+La devolución de errores se define en https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#returning-errors[BOLT #4: Onion Routing, Returning Errors].
+
+Los errores son codificados por el nodo que los devuelve (el que descubrió un error) en un _paquete de retorno_ como sigue:
+
+----
+    [32*byte:hmac]
+    [u16:failure_len]
+    [failure_len*byte:failuremsg]
+    [u16:pad_len]
+    [pad_len*byte:pad]
+----
+
+La suma de verificación HMAC del paquete de retorno se calcula con la clave ++um++, generada a partir del secreto compartido establecido por la onion.
+
+[TIP]
+====
+El nombre de la clave ++um++ es el reverso del nombre ++mu++, indicando el mismo uso pero en la dirección opuesta (retropropagación). 
+====
+
+A continuación, el nodo de retorno genera una clave +ammag+ (inversa de la palabra "gamma") y ofusca el paquete de retorno mediante una operación XOR con un flujo de bytes generado a partir de +ammag+.
+
+Finalmente, el nodo de retorno envía el paquete de vuelta al salto del que recibió la onion original.
+
+Cada salto que reciba un error generará una clave +ammag+ y ofuscará el paquete de retorno de nuevo utilizando una operación XOR con el flujo de bytes de +ammag+.
+
+Finalmente, el remitente (nodo de origen) recibe un paquete de retorno. Entonces generará las claves +ammag+ y ++um++ para cada salto y desofuscará el error de retorno iterativamente hasta que revele el paquete de retorno.
+
+[[failure_messages]]
+==== Mensajes de fallo.
+
+El +failuremsg+ está definido en https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#failure-messages[BOLT #4: Onion Routing, Failure Messages].
+
+Un mensaje de fallo consiste en un +código de fallo+ de dos bytes seguido de los datos aplicables a ese tipo de fallo.
+
+El byte superior del +código de fallo+ es un conjunto de banderas binarias que pueden combinarse (con OR binario):
+
+
+0x8000 (`BADONION`):: Cebolla no parsable encriptada por el peer emisor
+0x4000 (`PERM`):: Fallo permanente (si no, transitorio)
+0x2000 (`NODE`):: Fallo del nodo (en caso contrario, canal)
+0x1000 (`UPDATE`):: Se adjunta una nueva actualización del canal
+
+
+Los tipos de fallo mostrados en <<failure_types_table>> están definidos actualmente.
+
+include::failure_types_table.asciidoc[]
+
+[[stuck_payments]]
+===== Pagos atascados.
+
+En la implementación actual de la Lightning Network, existe la posibilidad de que un intento de pago se quede _atrapado_: ni se cumple ni se cancela por un error. Esto puede ocurrir debido a un error en un nodo intermediario, a que un nodo se desconecte mientras maneja HTLCs, o a que un nodo malicioso retenga HTLCs sin informar de un error. En todos estos casos, el HTLC no puede resolverse hasta que expire. El bloqueo de tiempo (CLTV) que se establece en cada HTLC ayuda a resolver esta condición (entre otros posibles fallos de enrutamiento y canal de HTLC).
+
+Sin embargo, esto significa que el remitente del HTLC tiene que esperar hasta que expire, y los fondos comprometidos en ese HTLC siguen sin estar disponibles hasta que el HTLC expire. Además, el remitente no puede reintentar ese mismo pago, porque si lo hace, corre el riesgo de que tanto el pago original como el reintentado tengan éxito: el destinatario recibe dos veces el pago. Esto se debe a que, una vez enviado, un HTLC no puede ser "cancelado" por el remitente, sino que tiene que fallar o expirar. Los pagos atascados, aunque raros, crean una experiencia de usuario no deseada, en la que el monedero del usuario no puede pagar o cancelar un pago. 
+
+[[keysend]]
+=== Pagos espontáneos de Keysend.
+
+En el flujo de pago descrito anteriormente en el capítulo, asumimos que Dina recibió una invoice de Alice "fuera de banda", o la obtuvo a través de algún mecanismo no relacionado con el protocolo (típicamente copiar/pegar o escaneos de códigos QR). Este rasgo significa que el proceso de pago siempre tiene dos pasos: en primer lugar, el remitente obtiene una invoice y, en segundo lugar, utiliza el hash del pago (codificado en la invoice) para encaminar con éxito un HTLC. El viaje de ida y vuelta adicional necesario para obtener una invoice antes de realizar un pago puede ser un cuello de botella en las aplicaciones que implican la transmisión de micropagos a través de Lightning. ¿Qué pasaría si pudiéramos "empujar" un pago de forma espontánea, sin tener que obtener primero una invoice del destinatario? El protocolo `keysend` es una extensión de extremo a extremo (sólo el remitente y el destinatario son conscientes) del protocolo Lightning que permite los pagos push espontáneos.
+
+==== Registros TLV personalizados de Onion.
+
+El moderno protocolo Lightning utiliza la codificación TLV (Type-Length-Value) en la onion para codificar la información que indica a cada nodo _dónde_ y _cómo_ reenviar el pago. Aprovechando el formato TLV, cada pieza de información de enrutamiento
+(como el siguiente nodo al que pasar el HTLC) se le asigna un tipo específico (o clave) codificado como un entero de longitud variable `BigSize` (de tamaño máximo como un entero de 64 bits). Estos tipos "esenciales" (valores invertidos por debajo de `65536`) se definen en BOLT #4, junto con el resto de los detalles de enrutamiento de la onion. Los tipos de onion con un valor superior a `65536` están destinados a ser utilizados por los monederos y las aplicaciones como "registros personalizados".
+
+Los registros personalizados permiten a las aplicaciones de pago adjuntar metadatos adicionales o contexto a un pago como pares clave/valor en la onion. Dado que los registros personalizados se incluyen en la propia carga útil de la onion, al igual que el resto de los contenidos del salto, los registros están cifrados de extremo a extremo. Como los registros personalizados consumen efectivamente una parte del paquete de onion de tamaño fijo de 1300 bytes, codificar cada clave y valor de cada registro personalizado reduce la cantidad de espacio disponible para codificar el resto de la ruta. En la práctica, esto significa que cuanto más espacio de onion se utilice para los registros personalizados, más corta puede ser la ruta. Dado que cada paquete HTLC es de tamaño fijo, los registros personalizados no _añaden_ ningún dato adicional a un HTLC; más bien, reasignan bytes que de otro modo se habrían llenado con datos aleatorios.
+
+==== Envío y recepción de pagos con llave.
+
+Un pago `keysend` invierte el flujo típico de un HTLC en el que el receptor revela una preimagen secreta al emisor. En su lugar, el emisor incluye la preimagen _dentro_ de la onion al receptor, y dirige el HTLC al receptor. El receptor descifra entonces la carga útil de la onion, y utiliza la imagen previa incluida (que _debe_ coincidir con el hash de pago del HTLC) para liquidar el pago. Como resultado, los pagos `keysend` pueden llevarse a cabo sin obtener primero una invoice del receptor, ya que la imagen previa es "empujada" hacia el receptor. Un pago `keysend` utiliza un tipo de registro personalizado TLV de `5482373484` para codificar un valor de preimagen de 32 bytes.
+
+==== Keysend y registros personalizados en aplicaciones Lightning.
+
+Muchas aplicaciones Lightning de streaming utilizan el protocolo `keysend` para transmitir continuamente satoshis a un destino identificado por su clave pública en la red.
+Normalmente, una aplicación también incluirá metadatos, como una nota de propina/donación u otra información a nivel de aplicación, además del registro `keysend`.
+
+=== Conclusión.
+
+El protocolo de enrutamiento de onions de Lightning Network está adaptado del protocolo Sphinx para servir mejor a las necesidades de una red de pagos. Como tal, ofrece una enorme mejora en la privacidad y la contra-vigilancia en comparación con la blockchain pública y transparente de Bitcoin.
+
+En <<path_finding>> veremos cómo la combinación de source routing y onion routing es utilizada por Alice para encontrar una buena ruta y dirigir el pago a Dina. Para encontrar un camino, Alice primero necesita aprender sobre la topología de la red, que es el tema de <<gossip>>. 

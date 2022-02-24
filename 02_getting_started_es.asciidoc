@@ -1,0 +1,456 @@
+[[getting-started]]
+== Empezando.
+
+En este capítulo, empezaremos por donde la mayoría de la gente empieza cuando se encuentra con la Lightning Network por primera vez, eligiendo el software para participar en la economía de la LN. Examinaremos las elecciones de dos usuarios que representan un caso de uso común para la Lightning Network y aprenderemos con el ejemplo. Alice, una clienta de una cafetería, utilizará un monedero Lightning en su dispositivo móvil para comprar café en la cafetería de Bob. Bob, un comerciante, utilizará un nodo y un monedero Lightning para ejecutar un sistema de punto de venta en su cafetería, de modo que pueda aceptar pagos a través de la Lightning Network.
+
+=== La primera billetera Lightning de Alice.
+
+Alice es una antigua usuaria de Bitcoin. Conocimos a Alice en el capítulo 1 de _Mastering Bitcoin_,footnote:[Andreas M. Antonopoulos, _Mastering Bitcoin_, 2ª Edición, https://github.com/bitcoinbook/bitcoinbook/blob/develop/ch01.asciidoc[Capítulo 1] (O'Reilly)] cuando compró una taza de café en la cafetería de Bob usando una transacción de Bitcoin. Si todavía no está familiarizado con el funcionamiento de las transacciones de Bitcoin o necesita un repaso, por favor lea _Mastering Bitcoin_ o el resumen en <<bitcoin_fundamentals_review>>.
+
+¡Alice se ha enterado recientemente de que el Café de Bob acaba de empezar a aceptar pagos en LN! Alice está ansiosa por conocer y experimentar con la Lightning Network; quiere ser uno de los primeros clientes de LN de Bob. Para ello, en primer lugar, Alice tiene que seleccionar un monedero Lightning que se ajuste a sus necesidades.
+
+Alice no quiere confiar la custodia de su bitcoin a terceros. Ha aprendido lo suficiente sobre la criptomoneda para saber cómo utilizar un monedero. También quiere un monedero móvil para poder utilizarlo para pequeños pagos sobre la marcha, así que elige el monedero _Eclair_, un popular monedero Lightning móvil no custodiado. Conozcamos más sobre cómo y por qué ha hecho estas elecciones.
+
+=== Nodos Lightning.
+
+Se accede a la Lightning Network a través de aplicaciones de software que pueden hablar el protocolo LN. Un _nodo Lightning Network_ (nodo LN o simplemente nodo) es una aplicación de software que tiene tres características importantes. En primer lugar, los nodos Lightning son monederos, por lo que envían y reciben pagos a través de la Lightning Network, así como en la red Bitcoin. En segundo lugar, los nodos deben comunicarse de igual a igual con otros nodos Lightning que crean la red. Por último, los nodos Lightning también necesitan acceder a la blockchain de Bitcoin (u otras blockchains para otras criptodivisas) para asegurar los fondos utilizados para los pagos.
+
+Los usuarios tienen el mayor grado de control al ejecutar su propio nodo Bitcoin y su nodo Lightning. Sin embargo, los nodos Lightning también pueden utilizar un cliente ligero de Bitcoin, comúnmente conocido como verificación simplificada de pagos (SPV), para interactuar con la blockchain de Bitcoin.
+
+[[ln_explorer]]
+=== Exploradores Lightning.
+
+Los exploradores LN son herramientas útiles para mostrar las estadísticas de los nodos, los canales y la capacidad de la red.
+
+A continuación se presenta una lista inagotable:
+
+* https://1ml.com[1ML Lightning explorer] 
+* https://explorer.acinq.co[ACINQ's Lightning explorer], con visualización de lujo 
+* https://amboss.space[Amboss Space Lightning explorer], con métricas de la comunidad y visualizaciones intuitivas
+* https://ln.bigsun.xyz[Fiatjaf's Lightning explorer], con muchos diagramas
+* https://hashxp.org/lightning/node[Explorador de rayos de hashXP]
+
+[TIP]
+====
+Hay que tener en cuenta que al utilizar los exploradores Lightning, al igual que con otros exploradores de bloques, la privacidad puede ser un problema.
+Si los usuarios se descuidan, el sitio web puede rastrear sus direcciones IP y recopilar sus registros de comportamiento (por ejemplo, los nodos que les interesan a los usuarios).
+
+Además, hay que tener en cuenta que, dado que no existe un consenso global sobre el gráfico actual de Lightning o el estado actual de cualquier política de canales existente, los usuarios nunca deben confiar en los exploradores de Lightning para obtener la información más actualizada.
+Además, a medida que los usuarios abren, cierran y actualizan canales, el gráfico cambiará y los exploradores de Lightning individuales pueden no estar actualizados.
+Utilice los exploradores de Lightning para visualizar la red o recopilar información, pero no como fuente autorizada de lo que ocurre en la red de Lightning.
+Para tener una visión autorizada de la Lightning Network, ejecuta tu propio nodo Lightning que construirá un gráfico de canales y recopilará diversas estadísticas, que podrás ver con una interfaz basada en la web.
+====
+ 
+
+=== Carteras Lightning.
+
+El término _Lightning wallet_ es algo ambiguo porque puede describir una amplia variedad de componentes combinados con alguna interfaz de usuario. Los componentes más comunes del software Lightning wallet incluyen:
+
+* Un almacén de claves que contiene secretos, como las claves privadas
+* Un nodo LN (nodo Lightning) que se comunica en la red peer-to-peer, como se ha descrito anteriormente
+* Un nodo Bitcoin que almacena los datos de la blockchain y se comunica con otros nodos Bitcoin
+* Un "mapa" de base de datos de los nodos y canales que se anuncian en la Lightning Network
+* Un gestor de canales que puede abrir y cerrar canales de la LN
+* Un sistema de cierre que puede encontrar una ruta de canales conectados desde el origen del pago hasta el destino del mismo
+
+Un monedero Lightning puede contener todas estas funciones, actuando como un monedero "completo", sin depender de ningún servicio de terceros. O uno o más de estos componentes pueden depender (parcial o totalmente) de servicios de terceros que medien en esas funciones.
+
+Una distinción _clave_ (juego de palabras) es si la función de almacén de claves es interna o subcontratada. En las cadenas de bloques, el control de las claves determina la custodia de los fondos, tal y como recuerda la frase "tus claves, tus monedas; no tus claves, no tus monedas". El monedero de autocustodia, en comparación, es aquel en el que el almacén de claves forma parte del monedero, y las claves son controladas directamente por el usuario.  El término monedero sin custodia sólo implica que el almacén de claves es local y está bajo el control del usuario. Sin embargo, uno o más de los otros componentes del monedero pueden o no estar externalizados y depender de terceros de confianza.
+
+Las cadenas de bloques, especialmente las cadenas de bloques abiertas como Bitcoin, intentan minimizar o eliminar la confianza en terceros y dar poder a los usuarios. A menudo se denomina modelo "sin confianza", aunque "confianza minimizada" es un término más adecuado. En estos sistemas, el usuario confía en las reglas del software, no en terceros. Por lo tanto, la cuestión del control de las claves es una consideración principal a la hora de elegir un monedero Lightning.
+
+Todos los demás componentes de un monedero Lightning conllevan consideraciones similares de confianza. Si todos los componentes están bajo el control del usuario, se minimiza la cantidad de confianza en terceros, aportando el máximo poder al usuario. Por supuesto, esto conlleva una contrapartida directa porque con ese poder viene la correspondiente responsabilidad de gestionar un software complejo.
+
+Cada usuario debe tener en cuenta sus propios conocimientos técnicos antes de decidir qué tipo de monedero Lightning va a utilizar. Aquellos con fuertes habilidades técnicas deberían utilizar un monedero Lightning que ponga todos los componentes bajo el control directo del usuario. Aquellos con menos habilidades técnicas, pero con el deseo de controlar sus fondos, deberían elegir una billetera Lightning no custodiada.
+A menudo, la confianza en estos casos está relacionada con la privacidad.
+Si los usuarios deciden externalizar alguna funcionalidad a un tercero, suelen renunciar a cierta privacidad, ya que el tercero conocerá cierta información sobre ellos.
+
+Por último, aquellos que buscan la simplicidad y la comodidad, incluso a expensas del control y la seguridad, pueden elegir un monedero Lightning de custodia. Esta es la opción menos complicada técnicamente, pero _socava el modelo de confianza de la criptodivisa_ y, por lo tanto, debería considerarse sólo como un peldaño hacia un mayor control y autoconfianza.
+
+Hay muchas formas de caracterizar o categorizar los monederos.
+Las preguntas más importantes que hay que hacerse sobre un monedero específico son:
+
+. ¿Este monedero Lightning tiene un nodo Lightning completo o utiliza un nodo Lightning de terceros?
+. ¿Este monedero Lightning tiene un nodo Bitcoin completo o utiliza un nodo Bitcoin de terceros?
+. ¿Esta billetera Lightning almacena sus propias claves bajo el control del usuario (autocustodia) o las claves están en manos de un tercero?
+
+[TIP]
+====
+Si un monedero Lightning utiliza un nodo Lightning de terceros, es este nodo Lightning de terceros el que decide cómo comunicarse con Bitcoin. Por lo tanto, utilizar un nodo Lightning de terceros implica que también se utiliza un nodo Bitcoin de terceros. Sólo cuando el monedero Lightning utiliza su propio nodo Lightning existe la posibilidad de elegir entre un nodo Bitcoin completo y un nodo Bitcoin de terceros.
+====
+
+En el nivel más alto de abstracción, las preguntas 1 y 3 son las más elementales.
+De estas dos preguntas, podemos derivar cuatro posibles categorías.
+Podemos colocar estas cuatro categorías en un cuadrante, como se ve en <<lnwallet-categories>>.
+Pero recuerda que ésta es sólo una forma de categorizar las billeteras Lightning. 
+
+[[lnwallet-categories]]
+.Lightning wallets quadrant
+[options="header"]
+|===
+|                        | *Full Lightning node*      | *Third-party Lightning node*
+| *Self-custody*         | Q1: High technical skill, least trust in third parties, most permissionless | Q2: Below medium technical skills, below medium trust in third parties, requires some permissions
+| *Custodial*            | Q3: Above medium technical skills, above medium trust in third parties, requires some permissions | Q4: Low technical skills, high trust in third parties, least permissionless
+|===
+
+El cuadrante 3 (Q3), en el que se utiliza un nodo Lightning completo, pero las claves están en manos de un custodio, no es actualmente común.
+Los futuros monederos de ese cuadrante pueden dejar que un usuario se preocupe de los aspectos operativos de su nodo, pero luego delegar el acceso a las claves a un tercero que utilice principalmente el cold storage.
+
+Los monederos Lightning pueden instalarse en diversos dispositivos, como ordenadores portátiles, servidores y dispositivos móviles. Para ejecutar un nodo Lightning completo, será necesario utilizar un servidor o un ordenador de sobremesa, ya que los dispositivos móviles y los ordenadores portátiles no suelen ser lo suficientemente potentes en términos de capacidad, procesamiento, duración de la batería y conectividad.
+
+La categoría de nodos Lightning de terceros puede subdividirse de nuevo:
+
+Lightweight:: 
+ Esto significa que el monedero no opera un nodo Lightning y, por lo tanto, necesita obtener información sobre la Lightning Network a través de Internet del nodo Lightning de otra persona.
+None:: 
+ Esto significa que no sólo el nodo Lightning es operado por un tercero, sino que la mayor parte de la billetera es operada por un tercero en la nube. Se trata de un monedero de custodia en el que otra persona controla la custodia de los fondos.
+
+Estas subcategorías se utilizan en <<lnwallet-examples>>.
+
+[role="pagebreak-before"]
+Otros términos que necesitan explicación en <<lnwallet-examples>> en la columna "Bitcoin node" son:
+
+Neutrino::
+ Este monedero no opera un nodo Bitcoin. En su lugar, se accede a un nodo Bitcoin operado por otra persona (un tercero) a través del Protocolo Neutrino.
+Electrum::
+ Este monedero no opera un nodo Bitcoin. En su lugar, se accede a un nodo Bitcoin operado por otra persona (un tercero) a través del Protocolo Electrum.
+Bitcoin Core::
+ Es una implementación de un nodo Bitcoin.
+btcd::
+ Esta es otra implementación de un nodo Bitcoin.
+
+En <<lnwallet-examples>>, vemos algunos ejemplos de aplicaciones de nodos Lightning y monederos actualmente populares para diferentes tipos de dispositivos. La lista está ordenada primero por tipo de dispositivo y luego alfabéticamente.
+
+[[lnwallet-examples]]
+.Examples of popular Lightning wallets
+[options="header"]
+|===
+| Application    | Device  | Lightning node | Bitcoin node          | Keystore
+| Blue Wallet    | Mobile  | None        | None                  | Custodial
+| Breez Wallet   | Mobile  | Full node   | Neutrino              | Self-custody
+| Eclair Mobile  | Mobile  | Lightweight | Electrum              | Self-custody
+| lntxbot        | Mobile  | None        | None                  | Custodial
+| Muun | Mobile  | Lightweight | Neutrino              | Self-custody
+| Phoenix Wallet | Mobile  | Lightweight | Electrum              | Self-custody
+| Zeus           | Mobile  | Full node   | Bitcoin Core/btcd     | Self-custody
+| Electrum       | Desktop | Full node   | Bitcoin Core/Electrum | Self-custody
+| Zap Desktop    | Desktop | Full node   | Neutrino              | Self-custody
+| c-lightning    | Server  | Full node   | Bitcoin Core          | Self-custody
+| Eclair Server  | Server  | Full node   | Bitcoin Core/Electrum | Self-custody
+| lnd            | Server  | Full node   | Bitcoin Core/btcd     | Self-custody
+|===
+
+[[testnet-bitcoin]]
+==== Testnet Bitcoin.
+
+The Bitcoin system offers an alternative chain for testing purposes called _testnet_, in contrast with the "normal" Bitcoin chain which is referred to as _mainnet_. On testnet, the currency is _testnet bitcoin_ (_tBTC_), which is a worthless copy of bitcoin used exclusively for testing. Every function of Bitcoin is replicated exactly, but the money is worth nothing, so you literally have nothing to lose!
+
+Some Lightning wallets can also operate on testnet, allowing you to make Lightning payments with testnet bitcoin, without risking real funds. This is a great way to experiment with Lightning safely. Eclair Mobile, which Alice uses in this chapter, is one example of a Lightning wallet that supports testnet operation.
+
+You can get some tBTC to play with from a _testnet bitcoin faucet_, which gives out free tBTC on demand. Here are a few testnet faucets:
+
+++++
+<ul class="simplelist">
+<li><a href="https://coinfaucet.eu/en/btc-testnet/"><em>https://coinfaucet.eu/en/btc-testnet</em></a></li>
+<li><a href="https://testnet-faucet.mempool.co/"><em>https://testnet-faucet.mempool.co</em></a></li>
+<li><a href="https://bitcoinfaucet.uo1.net/"><em>https://bitcoinfaucet.uo1.net</em></a></li>
+<li><a href="https://testnet.help/en/btcfaucet/testnet"><em>https://testnet.help/en/btcfaucet/testnet</em></a></li>
+</ul>
+++++
+
+Todos los ejemplos de este libro pueden ser replicados exactamente en testnet con tBTC, así que puedes seguirlos si quieres sin arriesgar dinero real.
+
+=== Equilibrio entre complejidad y control.
+
+Los monederos Lightning tienen que lograr un cuidadoso equilibrio entre la complejidad y el control del usuario. Las que dan al usuario el mayor control sobre sus fondos, el mayor grado de privacidad y la mayor independencia de servicios de terceros son necesariamente más complejas y difíciles de manejar. A medida que la tecnología avanza, algunas de estas compensaciones se harán menos duras, y los usuarios podrán obtener más control sin más complejidad. Sin embargo, por el momento, diferentes empresas y proyectos están explorando diferentes posiciones a lo largo de este espectro de control-complejidad, con la esperanza de encontrar el "punto dulce" para los usuarios a los que se dirigen.
+
+A la hora de elegir un monedero, ten en cuenta que aunque no veas estas compensaciones, siguen existiendo. Por ejemplo, muchos monederos intentan eliminar la carga de la gestión del canal de sus usuarios. Para ello, introducen _nodos centrales_ a los que se conectan automáticamente todos sus monederos. Aunque esta solución simplifica la interfaz y la experiencia del usuario, introduce un punto único de fallo (SPoF), ya que estos nodos centrales se vuelven indispensables para el funcionamiento del monedero. Además, depender de un "centro" como éste puede reducir la privacidad del usuario, ya que el centro conoce al remitente y potencialmente (si construye la ruta de pago en nombre del usuario) también al destinatario de cada pago realizado por el monedero del usuario.
+
+En la siguiente sección, volveremos a nuestro primer usuario y recorreremos la configuración de su primer monedero Lightning. Ella ha elegido un monedero que es más sofisticado que los monederos de custodia más fáciles. Esto nos permite mostrar algo de la complejidad subyacente e introducir algunos de los funcionamientos internos de un monedero avanzado. Puede que tu primer monedero ideal esté orientado a la facilidad de uso, aceptando algunas de las compensaciones de control y privacidad. O tal vez usted es más un usuario avanzado y quiere ejecutar sus propios nodos Lightning y Bitcoin como parte de su solución de monedero.
+
+=== Descarga e instalación de un monedero Lightning.
+
+Cuando busques un nuevo monedero de criptomonedas, debes tener mucho cuidado de seleccionar una fuente segura para el software.
+
+Desafortunadamente, muchas aplicaciones de monederos falsos robarán tu dinero, y algunos de ellos incluso encuentran su camino en sitios de software de buena reputación y supuestamente vetados como las tiendas de aplicaciones de Apple y Google. Tanto si está instalando su primer monedero como su décimo, extreme siempre las precauciones. Una aplicación fraudulenta no sólo puede robar el dinero que le confíes, sino que también puede ser capaz de robar claves y contraseñas de otras aplicaciones al comprometer el sistema operativo de tu dispositivo móvil.
+
+Alice utiliza un dispositivo Android y va a utilizar Google Play Store para descargar e instalar el monedero Eclair. Buscando en Google Play, encuentra una entrada para "Eclair Mobile", como se muestra en <<eclair-playstore>>.
+
+[[eclair-playstore]]
+.Eclair Mobile in the Google Play Store
+image::images/mtln_0201.png["Eclair wallet in the Google Play Store"]
+
+
+[TIP]
+====
+Es posible experimentar y probar todo el software de tipo Bitcoin con riesgo cero (excepto su propio tiempo) utilizando bitcoins de testnet. También puedes descargar el monedero de testnet de Eclair para probar Lightning (en testnet) yendo a la Google Play Store.
+====
+
+Alice se da cuenta de algunos elementos diferentes en esta página que le ayudan a cerciorarse de que éste es, muy probablemente, el monedero "Eclair Mobile" correcto que está buscando. En primer lugar, la organización ACINQfootnote:[ACINQ: Developers of the Eclair Mobile Lightning wallet.] aparece como desarrollador de este monedero móvil, que Alice sabe por su investigación que es el desarrollador correcto. En segundo lugar, el monedero se ha instalado más de 10.000 veces y tiene más de 320 comentarios positivos. Es poco probable que se trate de una aplicación fraudulenta que se haya colado en Google Play Store. Como tercer paso, se dirige a la página web https://acinq.co[ACINQ]. Comprueba que la página web es segura verificando que la dirección comienza con https, o con el prefijo de un candado en algunos navegadores. En el sitio web, va a la sección de descargas o busca el enlace a la tienda de aplicaciones de Google. Encuentra el enlace y hace clic en él. Comprueba que este enlace la lleva a la misma aplicación en la tienda de aplicaciones de Google. Satisfecha con estos resultados, Alice instala la aplicación Eclair en su dispositivo móvil.
+
+[WARNING]
+====
+Tenga siempre mucho cuidado al instalar software en cualquier dispositivo. Hay muchos monederos de criptomonedas falsos que no sólo le robarán su dinero, sino que también podrían comprometer todas las demás aplicaciones de su dispositivo.
+====
+
+=== Creación de un nuevo monedero.
+
+Cuando Alice abre la aplicación Eclair Mobile por primera vez, se le presenta la opción de "Crear una nueva billetera" o "Importar una billetera existente". Alice creará un nuevo monedero, pero primero vamos a discutir por qué se presentan estas opciones y qué significa importar un monedero existente. 
+
+==== Responsabilidad con Custodia de Llaves.
+
+Como mencionamos al principio de esta sección, Eclair es un monedero _no custodio_, lo que significa que Alice tiene la custodia exclusiva de las claves utilizadas para controlar su bitcoin. Esto también significa que Alice es responsable de proteger y respaldar esas claves. Si Alice pierde las claves, nadie puede ayudarla a recuperar el bitcoin, y se perderán para siempre.
+
+[WARNING]
+====
+Con el monedero Eclair Mobile, Alice tiene la custodia y el control de las claves y, por lo tanto, la plena responsabilidad de mantener las claves seguras y respaldadas. Si pierde las claves, pierde el bitcoin, ¡y nadie puede ayudarla a recuperarse de esa pérdida!
+====
+
+==== Palabras mnemotécnicas.
+
+Al igual que la mayoría de los monederos de Bitcoin, Eclair Mobile proporciona una _frase mnemónica_ (también llamada a veces "semilla" o "frase semilla") para que Alice haga una copia de seguridad. La frase mnemónica consiste en 24 palabras en inglés, seleccionadas aleatoriamente por el software y utilizadas como base para las claves que genera el monedero. Alice puede utilizar la frase mnemotécnica para restaurar todas las transacciones y los fondos del monedero de Eclair Mobile en caso de pérdida del dispositivo móvil, un error de software o una corrupción de la memoria.
+
+[TIP]
+====
+El término correcto para estas palabras de respaldo es "frase mnemónica". Evitamos el uso del término "semilla" para referirse a una frase mnemónica porque aunque su uso es común, es incorrecto.
+====
+
+Cuando Alice elige crear un nuevo monedero, verá una pantalla con su frase mnemotécnica, que se parece a la captura de pantalla de <<eclair-mnemonic>>.
+
+[[eclair-mnemonic]]
+.New wallet mnemonic phrase
+image::images/mtln_0202.png["New Wallet Mnemonic Phrase"]
+
+En <<eclair-mnemonic>>, hemos ocultado a propósito parte de la frase mnemotécnica para evitar que los lectores de este libro reutilicen la mnemotecnia.
+
+[[mnemonic-storage]]
+==== Almacenar la mnemotecnia con seguridad.
+
+Alice debe tener cuidado de almacenar la frase mnemotécnica de manera que se evite el robo pero también la pérdida accidental. La forma recomendada para equilibrar adecuadamente estos riesgos es escribir dos copias de la frase mnemotécnica en papel, con cada una de las palabras numeradas-el orden importa.
+
+Una vez que Alice haya grabado la frase mnemotécnica, después de tocar "OK GOT IT" en su pantalla, se le presentará un cuestionario para asegurarse de que ha grabado correctamente la mnemotecnia. El cuestionario le pedirá tres o cuatro palabras al azar. Alice no se espera un test, pero como ha grabado la mnemotecnia correctamente, pasa sin ninguna dificultad.
+
+Una vez que Alice haya grabado la frase mnemotécnica y haya superado la prueba, deberá guardar cada copia en un lugar seguro y separado, como un cajón del escritorio cerrado con llave o una caja fuerte a prueba de incendios.
+
+[WARNING]
+====
+Nunca intente un esquema de seguridad "DIY" que se desvíe de alguna manera de la recomendación de mejores prácticas en <<mnemonic-storage>>. No cortes tu mnemónica por la mitad, ni hagas capturas de pantalla, ni la almacenes en unidades USB o en la nube, ni la encriptes, ni intentes ningún otro método no estándar. Inclinarás la balanza de tal manera que te arriesgas a perderla definitivamente. Muchas personas han perdido fondos, no por robo, sino porque intentaron una solución no estándar sin tener la experiencia necesaria para equilibrar los riesgos involucrados. La recomendación de la mejor práctica está cuidadosamente estudiada por los expertos y es adecuada para la gran mayoría de los usuarios.
+====
+
+Después de que Alice inicialice su monedero Eclair Mobile, verá un breve tutorial que destaca los distintos elementos de la interfaz de usuario. No replicaremos el tutorial aquí, pero exploraremos todos esos elementos mientras seguimos el intento de Alice de comprar una taza de café.
+
+=== Cargar Bitcoin en el monedero.
+
+Alice tiene ahora un monedero Lightning. ¡Pero está vacía! Ahora se enfrenta a uno de los aspectos más desafiantes de este experimento: tiene que encontrar una manera de adquirir algunos bitcoin y cargarlos en su monedero Eclair.
+
+[TIP]
+====
+Si Alice ya tiene bitcoin en otro monedero, podría elegir enviar ese bitcoin a su monedero Eclair en lugar de adquirir nuevos bitcoin para cargarlos en su nuevo monedero.
+====
+
+[[acquiring-bitcoin]]
+==== Adquirir Bitcoin.
+
+Hay varias formas en las que Alice puede adquirir bitcoin:
+
+* Puede cambiar algo de su moneda nacional (por ejemplo, USD) en un intercambio de criptodivisas.
+* Puede comprar algo a un amigo, o a un conocido de un encuentro de Bitcoin, a cambio de dinero en efectivo.
+* Puede encontrar un _Bitcoin ATM_ en su zona, que actúa como una máquina expendedora, vendiendo bitcoin a cambio de dinero.
+[role="pagebreak-before"]
+* Puede ofrecer sus habilidades o un producto que venda y aceptar el pago en bitcoin.
+* Puede pedir a su empleador o a sus clientes que le paguen en bitcoin.
+
+Todos estos métodos tienen diferentes grados de dificultad, y muchos implican el pago de una cuota. Algunos también requerirán que Alice proporcione documentos de identificación para cumplir con la normativa bancaria local. Sin embargo, con todos estos métodos, Alice podrá recibir bitcoin. 
+
+==== Recibiendo Bitcoin.
+
+Supongamos que Alice ha encontrado un cajero automático de Bitcoin local y ha decidido comprar algo de bitcoin a cambio de dinero en efectivo. Un ejemplo de cajero automático de Bitcoin, uno construido por la empresa Lamassu, se muestra en <<bitcoin-atm>>. Este tipo de cajeros automáticos de Bitcoin aceptan moneda nacional (dinero en efectivo) a través de una ranura para el dinero y envían bitcoin a una dirección de Bitcoin escaneada desde la billetera del usuario utilizando una cámara incorporada.
+
+[[bitcoin-atm]]
+.A Lamassu Bitcoin ATM
+image::images/mtln_0203.png["Lamassu Bitcoin ATM"]
+
+Para recibir el bitcoin en su monedero Eclair Lightning, Alice tendrá que presentar una dirección Bitcoin del monedero Eclair Lightning al cajero automático. El cajero puede entonces enviar el bitcoin recién adquirido por Alice a esta dirección Bitcoin.
+
+Para ver una dirección de Bitcoin en el monedero Eclair, Alice debe deslizar el dedo hacia la columna de la izquierda titulada SU DIRECCIÓN DE BITCOIN (ver <<eclair-receive>>), donde verá un código de barras cuadrado (llamado _código QR_) y una cadena de letras y números debajo de él.
+
+El código QR contiene la misma cadena de letras y números que se muestra debajo, en un formato fácil de escanear. De esta manera, Alice no tiene que escribir la dirección de Bitcoin. En la captura de pantalla (<<eclair-receive>>), hemos difuminado a propósito ambos, para evitar que los lectores envíen inadvertidamente bitcoin a esta dirección.
+
+[[eclair-receive]]
+.Alice's bitcoin address, shown in Eclair
+image::images/mtln_0204.png["Eclair bitcoin address QR code"]
+
+[NOTE]
+====
+Tanto las direcciones Bitcoin como los códigos QR contienen información de detección de errores que evita que cualquier error de escritura o de escaneo produzca una dirección Bitcoin "errónea". Si hay un error en la dirección, cualquier monedero Bitcoin se dará cuenta del error y se negará a aceptar la dirección Bitcoin como válida.
+====
+
+[role="pagebreak-before"]
+Alice puede llevar su dispositivo móvil al cajero automático y mostrarlo a la cámara incorporada, como se muestra en <<bitcoin-atm-receive>>. Después de introducir algo de dinero en la ranura, ¡recibirá bitcoin en Eclair!
+
+[[bitcoin-atm-receive]]
+.Bitcoin ATM scans the QR code
+image::images/mtln_0205.png["Bitcoin ATM scans the QR code"]
+
+Alice verá la transacción del cajero en la pestaña HISTORIA DE TRANSACCIONES del monedero Eclair. Aunque Eclair detectará la transacción de bitcoin en apenas unos segundos, la transacción de bitcoin tardará aproximadamente una hora en ser "confirmada" en la blockchain de Bitcoin. Como puedes ver en <<eclair-tx1>>, el monedero Eclair de Alice muestra "6+ conf" debajo de la transacción, indicando que la transacción ha recibido el mínimo requerido de seis confirmaciones, y sus fondos están ahora listos para ser utilizados.
+
+[TIP]
+====
+El número de confirmaciones de una transacción es el número de bloques minados desde (e incluyendo) el bloque que contenía esa transacción. Seis confirmaciones es la mejor práctica, pero diferentes monederos Lightning pueden considerar un canal abierto después de cualquier número de confirmaciones. Algunos monederos incluso escalan el número de confirmaciones esperadas por el valor monetario del canal.
+====
+
+Aunque en este ejemplo Alice utilizó un cajero automático para adquirir su primer bitcoin, los mismos conceptos básicos se aplicarían incluso si utilizara uno de los otros métodos en <<acquiring-bitcoin>>. Por ejemplo, si Alice quisiera vender un producto o prestar un servicio profesional a cambio de bitcoin, sus clientes podrían escanear la dirección de Bitcoin con sus billeteras y pagarle en bitcoin.
+
+[[eclair-tx1]]
+.Alice receives bitcoin
+image::images/mtln_0206.png["Bitcoin transaction received"]
+
+Del mismo modo, si facturara a un cliente por un servicio ofrecido a través de Internet, Alice podría enviar un correo electrónico o un mensaje instantáneo con la dirección Bitcoin o el código QR a su cliente, y éste podría pegar o escanear la información en un monedero Bitcoin para pagarle.
+
+Alice podría incluso imprimir el código QR y pegarlo en un cartel y mostrarlo públicamente para recibir propinas. Por ejemplo, podría tener un código QR pegado a su guitarra y recibir propinas mientras actúa en la calle. footnote:[Generalmente no es aconsejable reutilizar la misma dirección de Bitcoin para múltiples pagos porque todas las transacciones de Bitcoin son públicas.
+Una persona entrometida que pase por allí podría escanear el código QR de Alice y ver cuántas propinas ha recibido ya Alice en esta dirección en la blockchain de Bitcoin.
+Afortunadamente, la Lightning Network ofrece soluciones más privadas para esto, que se discutirán más adelante en el libro!].
+
+Finalmente, si Alice compró bitcoin en un intercambio de criptomonedas, podría (y debería) "retirar" el bitcoin pegando su dirección de Bitcoin en el sitio web del intercambio. El intercambio enviará entonces el bitcoin a su dirección directamente 
+
+=== De Bitcoin a Lightning Network.
+
+El bitcoin de Alice está ahora controlado por su monedero Eclair y ha sido registrado en la blockchain de Bitcoin. En este punto, el bitcoin de Alice está _en-cadena_, lo que significa que la transacción ha sido transmitida a toda la red Bitcoin, verificada por todos los nodos Bitcoin, y _minada_ (registrada) en la blockchain Bitcoin.
+
+Hasta ahora, el monedero de Eclair Mobile se ha comportado sólo como un monedero de Bitcoin, y Alice no ha utilizado las características de la Lightning Network de Eclair. Como es el caso de muchos monederos Lightning, Eclair tiende un puente entre Bitcoin y la Lightning Network actuando como monedero Bitcoin y como monedero Lightning.
+
+Ahora, Alice está preparada para empezar a utilizar la Lightning Network llevando su bitcoin fuera de la cadena para aprovechar los pagos rápidos, baratos y privados que ofrece la Lightning Network.
+
+==== Canales de la Lightning Network.
+
+Deslizando el dedo hacia la derecha, Alice accede a la sección LIGHTNING CHANNELS de Eclair. Aquí puede gestionar los canales que conectarán su monedero a la Lightning Network.
+
+Vamos a repasar la definición de un canal LN en este punto, para dejar las cosas un poco más claras. En primer lugar, la palabra "canal" es una metáfora de una _relación financiera_ entre el monedero Lightning de Alice y otro monedero Lightning. Lo llamamos canal porque es un medio para que el monedero de Alice y este otro monedero intercambien muchos pagos entre sí en la Lightning Network (fuera de la cadena) sin comprometer las transacciones en la blockchain de Bitcoin (en la cadena).
+
+El monedero o _nodo_ al que Alicia abre un canal se llama su _par de canal_. Una vez "abierto", un canal puede utilizarse para enviar muchos pagos de ida y vuelta entre el monedero de Alicia y su par de canal.
+
+Además, el channel peer de Alice puede _reenviar_ los pagos a través de otros canales más allá de la Lightning Network. De este modo, Alice puede _encaminar_ un pago a cualquier monedero (por ejemplo, el monedero Lightning de Bob) siempre y cuando el monedero de Alice pueda encontrar un _camino_ viable realizado saltando de canal en canal, hasta llegar al monedero de Bob.
+
+[TIP]
+====
+No todos los pares del canal son _buenos_ pares para enrutar pagos. Los pares bien conectados podrán enrutar los pagos a través de caminos más cortos hasta el destino, aumentando las posibilidades de éxito. Los pares del canal con amplios fondos podrán enrutar pagos más grandes. 
+====
+
+En otras palabras, Alice necesita uno o más canales que la conecten con uno o más nodos de la Lightning Network. No necesita un canal que conecte su billetera directamente con el Café de Bob para enviarle un pago, aunque también puede optar por abrir un canal directo. Cualquier nodo de la Lightning Network puede utilizarse para el primer canal de Alice. Cuanto más conectado esté un nodo, más gente podrá alcanzar Alice. En este ejemplo, ya que queremos demostrar también el enrutamiento de pagos, no haremos que Alice abra un canal directamente a la billetera de Bob. En su lugar, haremos que Alicia abra un canal hacia un nodo bien conectado y que luego utilice ese nodo para reenviar su pago, enrutándolo a través de cualquier otro nodo que sea necesario para llegar a Bob.
+
+Al principio, no hay canales abiertos, así que como vemos en <<eclair-channels>>, la pestaña LIGHTNING CHANNELS muestra una lista vacía. Si te fijas, en la esquina inferior derecha hay un símbolo de más (+), que es un botón para abrir un nuevo canal.
+
+[[eclair-channels]]
+.LIGHTNING CHANNELS tab
+image::images/mtln_0207.png["LIGHTNING CHANNELS tab"]
+
+[role="pagebreak-before"]
+Alice pulsa el símbolo más y se le presentan cuatro formas posibles de abrir un canal:
+
+* Pegar un nodo URI
+* Escanear un nodo URI
+* Nodo aleatorio
+* Nodo ACINQ
+
+Un "URI de nodo" es un Identificador Universal de Recursos (URI) que identifica un nodo específico de Lightning. Alice puede pegar un URI de este tipo desde su portapapeles o escanear un código QR que contenga esa misma información. Un ejemplo de URI de nodo se muestra como un código QR en <<node-URI-QR>> y luego como una cadena de texto.
+
+[[node-URI-QR]]
+.Node URI as a QR code
+image::images/mtln_0208.png["Lightning node URI QR code",width=120]
+
+[[node-URI-example]]
+.node URI
+----
+0237fefbe8626bf888de0cad8c73630e32746a22a2c4faa91c1d9877a3826e1174@1.ln.aantonop.com:9735
+----
+
+Aunque Alice podría seleccionar un nodo Lightning específico, o utilizar la opción "Random node" para que la billetera Eclair seleccione un nodo al azar, seleccionará la opción ACINQ Node para conectarse a uno de los nodos Lightning bien conectados de ACINQ.
+
+La elección del nodo ACINQ reducirá ligeramente la privacidad de Alice, porque dará a ACINQ la capacidad de ver todas las transacciones de Alice. También creará un único punto de fallo, ya que Alice sólo tendrá un canal, y si el nodo ACINQ no está disponible, Alice no podrá realizar pagos. Para mantener las cosas simples al principio, aceptaremos estas compensaciones. En los capítulos siguientes, aprenderemos gradualmente a ganar más independencia y a hacer menos concesiones.
+
+Alice selecciona el nodo ACINQ y está lista para abrir su primer canal en la Lightning Network. 
+
+==== Abrir un canal Lightning.
+
+Cuando Alice selecciona un nodo para abrir un nuevo canal, se le pide que seleccione la cantidad de bitcoin que quiere asignar a este canal. En capítulos posteriores, discutiremos las implicaciones de estas elecciones, pero por ahora, Alice asignará casi todos sus fondos al canal. Dado que tendrá que pagar las tasas de transacción para abrir el canal, seleccionará una cantidad ligeramente inferior a su balance total.footnote:[El monedero Eclair no ofrece una opción para calcular automáticamente las tasas necesarias y asignar la cantidad máxima de fondos a un canal, por lo que Alice tiene que calcularlo ella misma].
+
+Alice asigna 0.018 BTC de su total de 0.020 BTC a su canal y acepta la tarifa por defecto, como se muestra en <<eclair-open-channel>>.
+
+[[eclair-open-channel]]
+.Opening a Lightning channel
+image::images/mtln_0209.png["Opening a Lightning Channel"]
+
+Una vez que hace clic en ABRIR, su billetera construye la transacción especial de Bitcoin que abre un canal Lightning, conocida como la _transacción de financiación_. La funding transaction en la cadena se envía a la red Bitcoin para su confirmación.
+
+Alice ahora tiene que esperar de nuevo (ver "canal de espera") para que la transacción se registre en la blockchain de Bitcoin. Al igual que con la transacción inicial de Bitcoin que utilizó para adquirir su bitcoin, tiene que esperar seis o más confirmaciones (aproximadamente una hora).
+
+[[eclair-channel-waiting]]
+.Waiting for the funding transaction to open the channel
+image::images/mtln_0210.png["Waiting for the Funding Transaction to Open the Channel"]
+
+Una vez confirmada la funding transaction, el canal de Alice hacia el nodo ACINQ está abierto, financiado y listo, como se muestra en <<eclair-channel-open>>.
+
+[[eclair-channel-open]]
+.Channel is open
+image::images/mtln_0211.png["Channel is Open"]
+
+[TIP]
+====
+¿Te has dado cuenta de que la cantidad del canal parece haber cambiado? No lo ha hecho: el canal contiene 0,018 BTC, pero en el tiempo transcurrido entre las capturas de pantalla, el tipo de cambio del BTC cambió, por lo que el valor en USD es diferente. Puedes elegir mostrar los saldos en BTC o en USD, pero ten en cuenta que los valores en USD se calculan en tiempo real y cambiarán
+====
+
+=== Comprando una taza de café usando la Lightning Network.
+
+Alice ya tiene todo listo para empezar a usar la Lightning Network. Como puedes ver, ha costado un poco de trabajo y un poco de tiempo esperando las confirmaciones. Sin embargo, ahora las acciones posteriores son rápidas y fáciles. La Lightning Network permite realizar pagos sin tener que esperar confirmaciones, ya que los fondos se liquidan en segundos.
+
+Alice coge su dispositivo móvil y corre al Café de Bob en su barrio. Está emocionada por probar su nuevo monedero Lightning y utilizarlo para comprar algo.
+
+==== Bob's Cafe.
+
+Bob tiene una sencilla aplicación de punto de venta (PoS) para el uso de cualquier cliente que quiera pagar con bitcoin a través de la Lightning Network. Como veremos en el próximo capítulo, Bob utiliza la popular plataforma de código abierto _BTCPay Server_ que contiene todos los componentes necesarios para una solución de comercio electrónico o venta al por menor, tales como:
+
+* Un nodo Bitcoin que utiliza el software Bitcoin Core
+* Un nodo Lightning utilizando el software c-lightning
+* Una simple aplicación PoS para una tableta
+
+BTCPay Server facilita la instalación de todo el software necesario, la carga de imágenes y precios de los productos, y el lanzamiento de una tienda rápidamente.
+
+En el mostrador del Café de Bob, hay un dispositivo de tableta que muestra lo que se ve en <<bob-cafe-posapp>>.
+
+[[bob-cafe-posapp]]
+.Bob's point-of-sale application
+image::images/mtln_0212.png["Bob's Point-of-Sale Application"]
+
+==== Una invoice lightning.
+
+Alice selecciona la opción Café Latte en la pantalla y se le presenta una _factura lightning_ (también conocida como "solicitud de pago"), como se muestra en <<bob-cafe-invoice>>.
+
+[[bob-cafe-invoice]]
+.Lightning invoice for Alice's latte
+image::images/mtln_0213.png["BTCPay Server Lightning invoice"]
+
+[role="pagebreak-before"]
+Para pagar la invoice, Alice abre su monedero Eclair y selecciona el botón Enviar (que parece una flecha hacia arriba) en la pestaña HISTORIA DE TRANSACCIONES, como se muestra en <<alice-send-start>>.
+
+[[alice-send-start]]
+.Alice selecting Send
+image::images/mtln_0214.png["Lightning transaction send",width=300]
+
+[TIP]
+====
+El término "solicitud de pago" puede referirse a una solicitud de pago de Bitcoin o a una invoice de Lightning, y los términos "invoice" y "solicitud de pago" suelen utilizarse indistintamente. El término técnico correcto es "invoice Lightning", independientemente de cómo se denomine en el monedero.
+====
+
+Alice selecciona la opción de "escanear una solicitud de pago", escanea el código QR que aparece en la pantalla de la tableta (ver <<bob-cafe-invoice>>), y se le pide que confirme su pago, como se muestra en <<alice-send-detail>>. 
+
+Alice pulsa PAGAR, y un segundo después, la tableta de Bob muestra un pago exitoso. Alice ha completado su primer pago de LN. Ha sido rápido, barato y fácil. Ahora puede disfrutar de su café con leche comprado con bitcoin a través de un sistema de pago rápido, barato y descentralizado. A partir de ahora, Alice puede simplemente seleccionar un artículo en la pantalla de la tableta de Bob, escanear el código QR con su teléfono móvil, hacer clic en PAGAR y que le sirvan un café, todo ello en cuestión de segundos y sin una transacción en la cadena.
+
+[[alice-send-detail]]
+.Alice's send confirmation
+image::images/mtln_0215.png["Lightning transaction send confirmation",width=300]
+
+Los pagos Lightning también son mejores para Bob. Está seguro de que se le pagará por el café con leche de Alice sin tener que esperar una confirmación en la cadena. En el futuro, cuando a Alice le apetezca tomarse un café en el Café de Bob, podrá elegir entre pagar con bitcoin en la red Bitcoin o en la Lightning Network. ¿Cuál crees que elegirá?
+
+=== Conclusión.
+
+En este capítulo hemos seguido a Alice mientras descargaba e instalaba su primer monedero Lightning, adquiría y transfería algunos bitcoins, abría su primer canal Lightning y compraba una taza de café haciendo su primer pago en la Lightning Network. En los siguientes capítulos, veremos "bajo cuerda" cómo funciona cada componente de la Lightning Network y cómo el pago de Alice llegó al café de Bob.

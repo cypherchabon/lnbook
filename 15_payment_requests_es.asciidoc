@@ -1,0 +1,135 @@
+[[invoices]]
+== Solicitudes de pago de Lightning.
+
+En este capítulo veremos las _solicitudes de pago Lightning_, o como se conocen más comúnmente, las _facturas Lightning_.
+
+=== Facturas en el conjunto de protocolos Lightning.
+
+Las _solicitudes de pago_, también conocidas como _facturas_, forman parte de la capa de pagos y se muestran en la parte superior izquierda de <<LN_payment_request_highlight>>.
+
+[[LN_payment_request_highlight]]
+.Payment requests in the Lightning protocol suite
+image::images/mtln_1501.png["Payment requests in the Lightning protocol suite"]
+
+=== Introducción.
+
+Como hemos aprendido a lo largo del libro, para completar un pago con Lightning se necesitan mínimamente dos datos: un hash de pago y un destino. Como en la Lightning Network se utiliza SHA-256 para implementar los HTLC, esta información requiere 32 bytes para comunicarse. Los destinos, por su parte, son simplemente la clave pública `secp256k1` del nodo que desea recibir un pago.
+El objetivo de una solicitud de pago en el contexto de la Lightning Network es comunicar estas dos informaciones del emisor al receptor. El formato de código QR para comunicar la información necesaria para completar un pago de receptor a remitente se describe en https://github.com/lightningnetwork/lightning-rfc/blob/master/11-payment-encoding.md[BOLT #11: Protocolo de facturación para pagos Lightning]. En la práctica, en una solicitud de pago se comunica algo más que el hash del pago y el destino para que la codificación sea más completa.
+
+=== Solicitudes de Lightning payment frente a direcciones Bitcoin.
+
+Una pregunta habitual cuando la gente se encuentra por primera vez con una solicitud de Lightning payment es: ¿por qué no se puede utilizar un formato de dirección estática normal en su lugar?
+
+Para responder a esta pregunta, primero hay que interiorizar en qué se diferencia Lightning de la capa base de Bitcoin como método de pago. En comparación con una dirección de Bitcoin, que puede utilizarse para realizar un número potencialmente ilimitado de pagos
+(aunque la reutilización de una dirección de Bitcoin puede degradar la privacidad de uno), una solicitud de pago de Lightning sólo debe utilizarse _una vez_.  Esto se debe al hecho de que el envío de un pago a una dirección Bitcoin utiliza esencialmente un criptosistema de clave pública para "codificar" el pago de manera que sólo el verdadero "propietario" de esa dirección Bitcoin pueda canjearlo.
+
+En cambio, para completar un pago con Lightning, el receptor debe revelar un "secreto" a toda la ruta de pago, incluido el remitente. Esto puede interpretarse como el uso de una especie de criptografía simétrica específica del dominio, ya que la preimagen de pago es, a efectos prácticos, un nonce (número que sólo se utiliza una vez). Si el remitente intenta realizar otro pago utilizando ese hash de pago idéntico, se arriesga a perder los fondos porque el pago puede no llegar al destino. Es seguro asumir que después de que una imagen previa ha sido revelada, todos los nodos en la ruta la mantendrán para siempre, entonces en lugar de reenviar el HTLC para cobrar una tarifa de enrutamiento si el pago se completa, pueden simplemente liquidar el pago en esa instancia y ganar la cantidad total del pago a cambio. Como resultado, no es seguro utilizar una solicitud de pago más de una vez.
+
+Existen nuevas variantes de la solicitud de pago original de Lightning que permiten al remitente reutilizarlas tantas veces como quiera. Estas variantes invierten el flujo de pago normal, ya que el remitente transmite una imagen previa dentro de la carga útil cifrada de la onion al receptor, que es el único que puede descifrarla y liquidar el pago. Alternativamente, suponiendo un mecanismo que permita al remitente solicitar típicamente una nueva solicitud de pago al receptor, entonces se puede utilizar un protocolo interactivo que permita cierto grado de reutilización de la solicitud de pago. 
+
+=== BOLT #11: Serialización e interpretación de solicitudes de pago de Lightning.
+
+En esta sección, describiremos el mecanismo utilizado para codificar el conjunto de información necesaria para completar un pago en la Lightning Network. Como se mencionó anteriormente, el hash y el destino del pago es la cantidad mínima de información requerida para completar un pago. Sin embargo, en la práctica, también se comunica más información, como la información de bloqueo de tiempo, la expiración de la solicitud de pago y, posiblemente, una dirección de reserva en la cadena. El documento de especificación completo es https://github.com/lightningnetwork/lightning-rfc/blob/master/11-payment-encoding.md[BOLT #11: Invoice Protocol for Lightning Payments].
+
+==== Codificación de solicitudes de pago en la práctica.
+
+En primer lugar, examinemos el aspecto de una solicitud de pago real en la práctica. La siguiente es una solicitud de pago válida que podría haberse utilizado para completar un pago en la red principal Lightning Network en el momento en que se creó:
+
+----
+lnbc2500u1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdq5xysxxatsyp3k7enxv4jsxqzpuaztrnwngzn3kdzw5hydlzf03qdgm2hdq27cqv3agm2awhz5se903vruatfhq77w3ls4evs3ch9zw97j25emudupq63nyw24cg27h2rspfj9srp
+----
+
+==== El prefijo legible para el ser humano.
+
+Si miramos la cadena, podemos extraer una parte que podemos analizar con nuestros ojos, mientras que el resto parece un conjunto aleatorio de cadenas. La parte que puede ser analizada por un ser humano se denomina "prefijo legible por el ser humano". Permite a un humano extraer rápidamente alguna información relevante de una solicitud de pago de un vistazo. En este caso, podemos ver que este pago es para la instancia de la red principal de la Lightning Network (`lnbc`), y solicita 2.500 uBTC (microbitcoin), o 25.000.000 satoshis. Esta última poción se denomina parte de datos y utiliza un formato extensible para codificar la información necesaria para completar un pago.
+
+Cada versión de instancia de la Lightning Network (mainnet, testnet, etc.) tiene su propio prefijo legible por humanos (ver <<table1501>>). Esto permite al software cliente y también a los humanos determinar rápidamente si una solicitud de pago puede ser satisfecha por su nodo o no.
+
+[role="pagebreak-before less_space"]
+[[table1501]]
+.BOLT #11 network prefixes
+[options="header"]
+|=============================
+|Network       |BOLT #11 prefix
+|mainnet       |`lnbc`
+|testnet       |`lntb`
+|simnet/regtest|`lnbcrt`
+|=============================
+
+
+La primera parte del prefijo legible para el ser humano es una expresión _compacta_ del importe de la solicitud de pago. El importe compacto se codifica en dos partes. En primer lugar, se utiliza un número entero como importe _base_. A continuación, le sigue un multiplicador que nos permite especificar distintos incrementos de orden de magnitud compensados por el importe base. Si volvemos a nuestro ejemplo inicial, podemos tomar la parte "2500u" y disminuirla en un factor de 1.000 para utilizar en su lugar "2500m" o (2.500 mBTC).  Como regla general, para conocer el importe de una invoice de un vistazo, tome el factor base y multiplíquelo por el multiplicador.
+
+La lista completa de los multiplicadores definidos actualmente figura en la <<table1502>>.
+
+[[table1502]]
+.BOLT #11 amount multipliers
+[options="header"]
+|==============================================
+|Multiplier|Bitcoin unit|Multiplication factor
+|`m`|milli|0.001
+|`u`|micro|0.000001
+|`n`|nano|0.000000001
+|`p`|pico|0.000000000001
+|==============================================
+
+
+==== bech32 y el segmento de datos.
+
+Si la parte "ilegible" le resulta familiar, es porque utiliza el mismo esquema de codificación que las direcciones Bitcoin compatibles con SegWit utilizan hoy en día, es decir, bech32. Describir el esquema de codificación bech32 está fuera del alcance de este capítulo. En resumen, es una forma sofisticada de codificar cadenas cortas que tiene muy buenas propiedades de corrección y detección de errores.
+
+La porción de datos puede separarse en tres secciones:
+
+  * La marca de tiempo
+  * Cero o más pares clave-valor etiquetados
+  * La firma de la invoice completa
+
+La marca de tiempo se expresa en segundos desde el año 1970, o la época de Unix. Esta marca de tiempo permite al remitente calibrar la antigüedad de la invoice y, como veremos más adelante, permite al receptor forzar que una invoice sólo sea válida durante un periodo de tiempo si así lo desea.
+
+Al igual que el formato TLV que conocimos en <<tlv>>, el formato de invoice BOLT #11 utiliza una serie de pares clave-valor extensibles para codificar la información necesaria para satisfacer un pago. Como se utilizan pares clave-valor, es fácil añadir nuevos valores en el futuro si se introduce un nuevo tipo de pago o un requisito/funcionalidad adicional. 
+
+Por último, se incluye una firma que abarca toda la invoice firmada por el destino del pago. Esta firma permite al remitente verificar que la solicitud de pago fue efectivamente creada por el destino del pago. A diferencia de las solicitudes de pago de Bitcoin, que no están firmadas, esto nos permite asegurar que una entidad concreta ha firmado la solicitud de pago. La propia firma se codifica utilizando un ID de recuperación, lo que permite utilizar una firma más compacta que permite la extracción de la clave pública. Al verificar la firma, el ID de recuperación extrae la clave pública y la coteja con la clave pública incluida en la invoice.
+
+===== Campos de invoice etiquetados.
+
+Los campos de invoice etiquetados se codifican en el cuerpo principal de la invoice. Estos campos representan diferentes pares clave-valor que expresan información adicional que puede ayudar a completar el pago o información que es
+necesaria para completar el pago. Debido a que se utiliza una ligera variante de bech32, cada uno de estos campos está realmente en el dominio "base 5".
+
+Un campo de etiqueta determinado está formado por tres componentes:
+
+  * El "tipo" del campo (5 bits)
+  * La longitud de los datos del campo (10 bits)
+  * Los datos propiamente dichos, que tienen una longitud de 5 bytes.
+
+La lista completa de todos los campos etiquetados definidos actualmente se encuentra en la <<table1503>>.
+
+[[table1503]]
+.BOLT #11 tagged invoice fields
+[options="header"]
+|===
+|pass:[<span class="keep-together">Field tag</span>]|pass:[<span class="keep-together">Data length</span>]|Usage
+|`p`|`52`|The SHA-256 payment hash.
+|`s`|`52`|A 256-bit secret that increases the end-to-end privacy of a payment by mitigating probing by intermediate nodes.
+|`d`|Variable|The description, a short UTF-8 string of the purpose of the payment.
+|`n`|`53`|The public key of the destination node.
+|`h`|`52`|A hash that represents a description of the payment itself. This can be used to commit to a description that's over 639 bytes in length.
+|`x`|Variable|The expiry time, in seconds, of the payment. The default is 1 hour (3,600) if not specified.
+|`c`|Variable|The `min_cltv_expiry` to use for the final hop in the route. The default is 9 if not specified.
+|`f`|Variable|A fallback on-chain address to be used to complete the payment if the payment cannot be completed over the Lightning Network.
+|`r`|Variable|One or more entries that allow a receiver to give the sender additional ephemeral edges to complete the payment.
+|`9`|Variable|A set of 5-bit values that contain the feature bits that are required in order to complete the payment.
+|===
+
+Los elementos contenidos en el campo `r` se denominan comúnmente _pistas de enrutamiento_. Permiten al receptor comunicar un conjunto extra de aristas que pueden ayudar al emisor a completar su pago. Las pistas se utilizan normalmente cuando el receptor tiene algunos/todos los canales privados, y desea guiar al remitente hacia esta parte "no mapeada" del gráfico de canales. Una pista de enrutamiento codifica efectivamente la misma información que un mensaje normal `channel_update`.
+La actualización está empaquetada en un solo valor con los siguientes campos:
+
+ * La `pubkey` del nodo saliente en la arista (264 bits)
+ * El `short_channel_id` de la arista "virtual" (64 bits)
+ * La tarifa base (`fee_base_msat`) de la arista (32 bits)
+ * La tarifa proporcional (`fee_proportional_millionths`) (32 bits)
+ * El delta de expiración de CLTV (`cltv_expiry_delta`) (16 bits)
+
+La parte final del segmento de datos es el conjunto de bits de características que comunican al emisor la funcionalidad necesaria para completar un pago. Por ejemplo, si se añade un nuevo tipo de pago en el futuro que no es compatible con el tipo de pago original, el receptor puede establecer un bit de característica _requerida_ para comunicar que el pagador necesita entender esa característica para completar el pago.
+
+=== Conclusión.
+
+Como hemos visto, las facturas son mucho más que una simple solicitud de un importe. Contienen información crítica sobre _cómo_ realizar el pago, como pistas de enrutamiento, la clave pública del nodo de destino, claves efímeras para aumentar la seguridad, y mucho más.
